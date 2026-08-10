@@ -26,6 +26,8 @@ describe("ProviderSelectionView", () => {
   it("offers Gmail as the sole enabled provider and labels future providers", () => {
     const markup = renderProviderView();
 
+    expect(markup).toContain('<main class="app-shell" aria-labelledby="add-account-title">');
+    expect(markup).not.toContain("home-popup");
     expect(accountProviders.filter(({ enabled }) => enabled).map(({ id }) => id)).toEqual(["gmail"]);
     expect(markup).toContain('aria-label="Agregar cuenta de Gmail"');
     expect(markup).toContain('aria-label="Outlook, Próximamente" disabled=""');

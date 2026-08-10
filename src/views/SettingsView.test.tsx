@@ -8,6 +8,8 @@ describe("SettingsView", () => {
   it("renders an accessible title, back control, and honest read-only information", () => {
     const markup = renderToStaticMarkup(<SettingsView onBack={() => undefined} />);
 
+    expect(markup).toContain('<main class="app-shell" aria-labelledby="settings-title">');
+    expect(markup).not.toContain("home-popup");
     expect(markup).toContain('aria-labelledby="settings-title"');
     expect(markup).toContain('<h1 id="settings-title" tabindex="-1">Configuración</h1>');
     expect(markup).toContain('aria-label="Volver al inicio"');

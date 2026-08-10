@@ -26,7 +26,7 @@ export function PopupView({
   if (!isActive) return null;
 
   return (
-    <main className="app-shell">
+    <main className="app-shell home-popup">
       <header className="app-header">
         <p className="eyebrow">YOUR INBOX PET</p>
         <ViewHeading>ZEROCHI</ViewHeading>

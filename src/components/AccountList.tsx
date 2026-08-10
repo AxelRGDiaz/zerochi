@@ -2,7 +2,7 @@ import type { MailAccount } from "../types/mail";
 
 export function AccountList({ accounts }: { accounts: MailAccount[] }) {
   return (
-    <ul className="account-list" aria-label="Cuentas conectadas">
+    <ul className="account-list" aria-label="Cuentas conectadas" tabIndex={accounts.length > 0 ? 0 : undefined}>
       {accounts.map((account) => (
         <li key={account.id}>
           <button className="account-row" type="button">
