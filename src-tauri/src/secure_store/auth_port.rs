@@ -49,20 +49,6 @@ impl SecureRefreshTokenStorePort {
     fn with_storage(storage: Arc<dyn RefreshTokenStorage>) -> Self {
         Self { storage }
     }
-
-    /// Deletes a token for OAuth rollback or account cleanup.
-    ///
-    /// The integrated auth trait currently exposes only `set`, so deletion is
-    /// an inherent operation until Lead extends that Rust-only port.
-    pub(crate) fn delete<'a>(
-        &'a self,
-        account_id: &'a str,
-    ) -> PortFuture<'a, Result<(), AddAccountError>> {
-        Box::pin(async move {
-            let account_id = parse_account_id(account_id)?;
-            self.storage.delete(account_id).map_err(secure_store_failed)
-        })
-    }
 }
 
 impl fmt::Debug for SecureRefreshTokenStorePort {
@@ -74,26 +60,19 @@ impl fmt::Debug for SecureRefreshTokenStorePort {
 impl RefreshTokenStorePort for SecureRefreshTokenStorePort {
     fn set<'a>(
         &'a self,
-        account_id: &'a str,
+        account_id: Uuid,
         refresh_token: &'a [u8],
     ) -> PortFuture<'a, Result<(), AddAccountError>> {
         Box::pin(async move {
-            let account_id = parse_account_id(account_id)?;
             let refresh_token = Zeroizing::new(refresh_token.to_vec());
             self.storage
                 .set(account_id, refresh_token.as_slice())
                 .map_err(secure_store_failed)
         })
     }
-}
 
-fn parse_account_id(value: &str) -> Result<Uuid, AddAccountError> {
-    let parsed = Uuid::parse_str(value).map_err(|_| secure_store_failed_sanitized())?;
-    let is_canonical = !parsed.is_nil() && parsed.hyphenated().to_string() == value;
-    if is_canonical {
-        Ok(parsed)
-    } else {
-        Err(secure_store_failed_sanitized())
+    fn delete<'a>(&'a self, account_id: Uuid) -> PortFuture<'a, Result<(), AddAccountError>> {
+        Box::pin(async move { self.storage.delete(account_id).map_err(secure_store_failed) })
     }
 }
 
@@ -116,8 +95,8 @@ mod tests {
         task::{Context, Poll, Waker},
     };
 
-    const ACCOUNT_ID: &str = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
     const ACCOUNT_UUID: Uuid = Uuid::from_u128(0xaaaaaaaa_aaaa_4aaa_8aaa_aaaaaaaaaaaa);
+    const ACCOUNT_UUID_B: Uuid = Uuid::from_u128(0xbbbbbbbb_bbbb_4bbb_8bbb_bbbbbbbbbbbb);
     const SECRET: [u8; 32] = [0xA5; 32];
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -190,12 +169,12 @@ mod tests {
     }
 
     #[test]
-    fn set_and_delete_preserve_order_and_canonical_uuid() {
+    fn set_and_delete_preserve_order_for_typed_uuid() {
         let storage = Arc::new(FakeStorage::available());
         let adapter = SecureRefreshTokenStorePort::with_storage(storage.clone());
 
-        block_on_ready(adapter.set(ACCOUNT_ID, &SECRET)).expect("set");
-        block_on_ready(adapter.delete(ACCOUNT_ID)).expect("delete");
+        block_on_ready(adapter.set(ACCOUNT_UUID, &SECRET)).expect("set");
+        block_on_ready(adapter.delete(ACCOUNT_UUID)).expect("delete");
 
         assert_eq!(
             storage.operations.lock().expect("operations").as_slice(),
@@ -207,23 +186,22 @@ mod tests {
     }
 
     #[test]
-    fn malformed_or_noncanonical_uuid_never_reaches_storage() {
+    fn typed_uuid_accounts_remain_isolated_during_delete() {
         let storage = Arc::new(FakeStorage::available());
         let adapter = SecureRefreshTokenStorePort::with_storage(storage.clone());
 
-        for invalid in [
-            "not-a-uuid",
-            "aaaaaaaaaaaa4aaa8aaaaaaaaaaaaaaa",
-            "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA",
-            "00000000-0000-0000-0000-000000000000",
-        ] {
-            let error = block_on_ready(adapter.set(invalid, &SECRET)).unwrap_err();
-            let rendered = format!("{error}\n{error:?}");
-            assert_eq!(error.tag(), AddAccountErrorTag::SecureStoreFailed);
-            assert!(!rendered.contains(invalid));
-        }
+        block_on_ready(adapter.set(ACCOUNT_UUID, &SECRET)).expect("set account A");
+        block_on_ready(adapter.set(ACCOUNT_UUID_B, &SECRET)).expect("set account B");
+        block_on_ready(adapter.delete(ACCOUNT_UUID)).expect("delete account A");
 
-        assert!(storage.operations.lock().expect("operations").is_empty());
+        assert_eq!(
+            storage.operations.lock().expect("operations").as_slice(),
+            [
+                Operation::Set(ACCOUNT_UUID),
+                Operation::Set(ACCOUNT_UUID_B),
+                Operation::Delete(ACCOUNT_UUID)
+            ]
+        );
     }
 
     #[test]
@@ -235,8 +213,8 @@ mod tests {
             let storage = Arc::new(FakeStorage::failing(kind));
             let adapter = SecureRefreshTokenStorePort::with_storage(storage);
 
-            let set_error = block_on_ready(adapter.set(ACCOUNT_ID, &SECRET)).unwrap_err();
-            let delete_error = block_on_ready(adapter.delete(ACCOUNT_ID)).unwrap_err();
+            let set_error = block_on_ready(adapter.set(ACCOUNT_UUID, &SECRET)).unwrap_err();
+            let delete_error = block_on_ready(adapter.delete(ACCOUNT_UUID)).unwrap_err();
 
             for error in [set_error, delete_error] {
                 assert_eq!(error.tag(), AddAccountErrorTag::SecureStoreFailed);
