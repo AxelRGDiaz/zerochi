@@ -8,6 +8,11 @@
 // secure-store branches land together.
 #![allow(dead_code)]
 
+mod auth_port;
+
+#[allow(unused_imports)]
+pub(crate) use auth_port::SecureRefreshTokenStorePort;
+
 use std::{fmt, sync::Arc};
 
 use uuid::Uuid;
