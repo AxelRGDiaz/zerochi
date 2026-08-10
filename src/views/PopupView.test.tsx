@@ -2,7 +2,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { MailAccount } from "../types/mail";
 import type { PetPresentation } from "../pet/PetState";
-import type { AddAccountState } from "../stores/addAccountController";
 import { PopupView } from "./PopupView";
 
 const accounts: MailAccount[] = [
@@ -15,14 +14,13 @@ const presentation: PetPresentation = {
   mood: "happy",
 };
 
-function renderPopup(isActive: boolean, addAccountState: AddAccountState = { status: "idle" }) {
+function renderPopup(isActive: boolean) {
   return renderToStaticMarkup(
     <PopupView
       accounts={accounts}
-      addAccountState={addAccountState}
       isActive={isActive}
-      onAddAccount={() => undefined}
-      onRetryAddAccount={() => undefined}
+      onOpenAddAccount={() => undefined}
+      onOpenSettings={() => undefined}
       pendingTotal={2}
       presentation={presentation}
     />,

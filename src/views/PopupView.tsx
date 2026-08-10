@@ -1,27 +1,25 @@
 import type { MailAccount } from "../types/mail";
 import type { PetPresentation } from "../pet/PetState";
-import type { AddAccountState } from "../stores/addAccountController";
 import { AccountList } from "../components/AccountList";
 import { PopupActions } from "../components/PopupActions";
 import { PopupSummary } from "../components/PopupSummary";
+import { ViewHeading } from "../components/ViewHeading";
 import { PetRenderer } from "../pet/PetRenderer";
 
 interface PopupViewProps {
   accounts: MailAccount[];
-  addAccountState: AddAccountState;
   isActive: boolean;
-  onAddAccount: () => void;
-  onRetryAddAccount: () => void;
+  onOpenAddAccount: () => void;
+  onOpenSettings: () => void;
   pendingTotal: number;
   presentation: PetPresentation;
 }
 
 export function PopupView({
   accounts,
-  addAccountState,
   isActive,
-  onAddAccount,
-  onRetryAddAccount,
+  onOpenAddAccount,
+  onOpenSettings,
   pendingTotal,
   presentation,
 }: PopupViewProps) {
@@ -31,16 +29,12 @@ export function PopupView({
     <main className="app-shell">
       <header className="app-header">
         <p className="eyebrow">YOUR INBOX PET</p>
-        <h1>ZEROCHI</h1>
+        <ViewHeading>ZEROCHI</ViewHeading>
       </header>
       <PetRenderer presentation={presentation} visible={isActive} />
       <PopupSummary message={presentation.message} pendingTotal={pendingTotal} />
       <AccountList accounts={accounts} />
-      <PopupActions
-        addAccountState={addAccountState}
-        onAddAccount={onAddAccount}
-        onRetryAddAccount={onRetryAddAccount}
-      />
+      <PopupActions onOpenAddAccount={onOpenAddAccount} onOpenSettings={onOpenSettings} />
     </main>
   );
 }

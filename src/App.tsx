@@ -1,15 +1,19 @@
 import "./App.css";
 import { presentPet } from "./pet/PetEngine";
 import { createAddAccountController, useAddAccountController } from "./stores/addAccountController";
+import { appNavigationStore, useAppNavigation } from "./stores/appNavigationStore";
 import { mockAccounts } from "./stores/mockState";
 import { usePopupVisibility } from "./stores/popupVisibilityStore";
 import { invokeAddAccount } from "./stores/tauriAddAccount";
+import { ProviderSelectionView } from "./views/ProviderSelectionView";
 import { PopupView } from "./views/PopupView";
+import { SettingsView } from "./views/SettingsView";
 
 const addAccountController = createAddAccountController(invokeAddAccount, mockAccounts);
 
 function App() {
   const { isActive } = usePopupVisibility();
+  const { route } = useAppNavigation();
   const { accounts, addAccountState } = useAddAccountController(addAccountController);
   const pendingTotal = accounts.reduce((total, account) => total + account.pendingCount, 0);
   const presentation = presentPet({
@@ -17,13 +21,29 @@ function App() {
     accounts: accounts.map(({ id, pendingCount }) => ({ accountId: id, pendingCount })),
   });
 
+  if (!isActive) return null;
+
+  if (route === "add_account") {
+    return (
+      <ProviderSelectionView
+        addAccountState={addAccountState}
+        onAddGmail={() => void addAccountController.addAccount()}
+        onBack={appNavigationStore.back}
+        onRetry={() => void addAccountController.retry()}
+      />
+    );
+  }
+
+  if (route === "settings") {
+    return <SettingsView onBack={appNavigationStore.back} />;
+  }
+
   return (
     <PopupView
       accounts={accounts}
-      addAccountState={addAccountState}
-      isActive={isActive}
-      onAddAccount={() => void addAccountController.addAccount()}
-      onRetryAddAccount={() => void addAccountController.retry()}
+      isActive
+      onOpenAddAccount={() => appNavigationStore.navigate("add_account")}
+      onOpenSettings={() => appNavigationStore.navigate("settings")}
       pendingTotal={pendingTotal}
       presentation={presentation}
     />
