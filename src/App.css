@@ -27,6 +27,9 @@ h1 { margin: 5px 0 22px; font-size: 24px; letter-spacing: .12em; }
 .account-count { min-width: 25px; padding: 3px 8px; border-radius: 99px; background: #593f46; color: white; font-size: 12px; text-align: center; }
 .app-footer { display: flex; justify-content: space-between; margin-top: 18px; }
 .app-footer button { border: 0; color: #795f66; background: transparent; cursor: pointer; font-size: 12px; }
+.app-footer button:disabled { cursor: wait; opacity: .62; }
+.add-account-control { display: grid; justify-items: start; gap: 6px; }
+.add-account-status { max-width: 260px; margin: 0; color: #795f66; font-size: 11px; line-height: 1.35; }
 @media (prefers-color-scheme: dark) {
   :root { color: #f4e9df; background: #211b20; }
   .app-shell { background: radial-gradient(circle at 50% 20%, #392d30 0 22%, transparent 48%), #211b20; }
