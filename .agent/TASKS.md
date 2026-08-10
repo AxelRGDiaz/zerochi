@@ -8,7 +8,7 @@ Status markers: `[ ]` ready, `[>]` active, `[x]` complete, `[!]` blocked. Lead a
 - **M1 Menu bar + UI mock:** [>] `ui` extract popup view and visibility state; [>] `tauri` show/hide/focus popup and tray menu; [ ] `qa` lifecycle/accessibility review.
 - **M2 PetEngine mock:** [>] `pet` add event queue/idle fallback tests; [ ] `qa` property/boundary tests.
 - **M3 Sprite renderer:** [ ] `pet` add placeholder development sheet and visibility/completion tests; no final art.
-- **M4 OAuth single account:** [x] `lead` approve environment/secure-store direction; [ ] `gmail` Rust-side env validation and desktop PKCE flow; [ ] `tauri` Keychain adapter; [ ] `qa` token/config exposure audit.
+- **M4 OAuth single account:** [x] `lead` approve environment/secure-store direction and `add_account` DTO/error contract; [>] `gmail` Rust-side env validation and desktop PKCE core; [>] `tauri` Keychain adapter; [>] `qa` token/config acceptance audit.
 - **M5 OAuth multicuenta:** [ ] `gmail` independent account credentials/revocation; [ ] `ui` account management.
 - **M6 Initial sync:** [ ] `gmail` metadata baseline that creates zero historical pending; [ ] `qa` large mailbox tests.
 - **M7 Incremental sync:** [ ] `gmail` history pagination, cursor commit, 404 recovery, backoff, poll mutex.
@@ -34,3 +34,11 @@ Status markers: `[ ]` ready, `[>]` active, `[x]` complete, `[!]` blocked. Lead a
 - [x] `ui`: extract the M1 popup presentation and a testable visibility store using existing DTOs, with the coordinated `src/App.tsx` composition change only. Commit `def8fa7`.
 - [x] `pet`: implement a pure deterministic pet-event queue with idle fallback and boundary/replacement tests under `src/pet/**`; no UI wiring or shared-contract changes. Commit `cfcdf36`.
 - [x] `qa`: perform the M0 security/performance baseline audit and commit the reproducible findings report at `docs/qa/M0_BASELINE.md`; production fixes remain with owners. Commit `b4d9641`.
+
+## Active assignments — Add account foundation
+
+- [>] `gmail`: implement the M4 Rust-only client-ID validator, sanitized auth error model, PKCE/state generation, authorization request construction, and deterministic injected-port tests under owned auth/account paths; no live token persistence or command wiring yet.
+- [>] `tauri`: implement and test the M4/M13 `SecureStore` macOS Keychain adapter under `src-tauri/src/secure_store/**`, including protected-data versus unsigned-development selection, UUID isolation, redaction, deletion, and zeroization.
+- [>] `ui`: implement the Add account controller and accessible pending/success/error/cancelled presentation on top of the approved zero-argument command contract, preserving mockability and preventing duplicate clicks.
+- [>] `qa`: review the approved M4 contract/design and commit a reproducible Add account security acceptance plan; production fixes remain with owners.
+- [ ] `lead`: after green specialist commits, approve dependency changes, integrate the Rust Tauri command/browser callback seam, run cross-branch contract tests, and dispatch the implementation audit.
