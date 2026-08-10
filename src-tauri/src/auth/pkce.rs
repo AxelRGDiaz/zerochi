@@ -6,7 +6,7 @@ use zeroize::Zeroize;
 
 const ENTROPY_BYTES: usize = 32;
 
-pub(crate) trait RandomSource {
+pub(crate) trait RandomSource: Send + Sync {
     fn fill(&self, destination: &mut [u8]) -> Result<(), AddAccountError>;
 }
 
@@ -49,7 +49,9 @@ impl fmt::Debug for Pkce {
     }
 }
 
-pub(crate) fn generate_pkce(random: &impl RandomSource) -> Result<Pkce, AddAccountError> {
+pub(crate) fn generate_pkce(
+    random: &(impl RandomSource + ?Sized),
+) -> Result<Pkce, AddAccountError> {
     let mut verifier_entropy = [0_u8; ENTROPY_BYTES];
     let mut state_entropy = [0_u8; ENTROPY_BYTES];
 

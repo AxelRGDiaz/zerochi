@@ -4,7 +4,8 @@ use url::{Host, Url};
 
 const GOOGLE_AUTHORIZATION_ENDPOINT: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const CALLBACK_PATH: &str = "/oauth/callback";
-const SCOPES: &str = "openid email profile https://www.googleapis.com/auth/gmail.readonly";
+pub(crate) const APPROVED_SCOPES: &str =
+    "openid email profile https://www.googleapis.com/auth/gmail.readonly";
 
 pub(crate) struct LoopbackRedirect(Url);
 
@@ -60,7 +61,7 @@ impl AuthorizationRequest {
                 .append_pair("client_id", client_id.as_str())
                 .append_pair("redirect_uri", redirect.as_str())
                 .append_pair("response_type", "code")
-                .append_pair("scope", SCOPES)
+                .append_pair("scope", APPROVED_SCOPES)
                 .append_pair("access_type", "offline")
                 .append_pair("prompt", "consent")
                 .append_pair("code_challenge", challenge.expose())
@@ -187,7 +188,7 @@ mod tests {
             )
         );
         assert_eq!(pairs[2], ("response_type".into(), "code".into()));
-        assert_eq!(pairs[3], ("scope".into(), SCOPES.into()));
+        assert_eq!(pairs[3], ("scope".into(), APPROVED_SCOPES.into()));
         assert_eq!(pairs[4], ("access_type".into(), "offline".into()));
         assert_eq!(pairs[5], ("prompt".into(), "consent".into()));
         assert_eq!(

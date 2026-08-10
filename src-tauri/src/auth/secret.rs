@@ -1,3 +1,4 @@
+use serde::{Deserialize, Deserializer};
 use std::fmt;
 use zeroize::Zeroize;
 
@@ -15,6 +16,21 @@ impl SensitiveString {
 
     pub(crate) fn expose_bytes(&self) -> &[u8] {
         self.0.as_bytes()
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+impl<'de> Deserialize<'de> for SensitiveString {
+    fn deserialize<DeserializerType>(
+        deserializer: DeserializerType,
+    ) -> Result<Self, DeserializerType::Error>
+    where
+        DeserializerType: Deserializer<'de>,
+    {
+        String::deserialize(deserializer).map(Self::new)
     }
 }
 

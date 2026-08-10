@@ -1,10 +1,11 @@
-use super::{AddAccountError, AddAccountErrorTag};
-use std::{ffi::OsString, fmt};
+use super::{AddAccountError, AddAccountErrorTag, ClientIdPort};
+use std::{ffi::OsString, fmt, fs};
 
 const CLIENT_ID_ENV: &str = "ZEROCHI_GOOGLE_CLIENT_ID";
 const CLIENT_ID_SUFFIX: &str = ".apps.googleusercontent.com";
 const MIN_CLIENT_ID_BYTES: usize = 32;
 const MAX_CLIENT_ID_BYTES: usize = 255;
+const MAX_DOTENV_BYTES: u64 = 64 * 1024;
 
 pub(crate) trait Environment {
     fn var_os(&self, name: &str) -> Option<OsString>;
@@ -18,11 +19,31 @@ impl Environment for ProcessEnvironment {
     }
 }
 
+pub(crate) struct ProcessClientId;
+
+impl ClientIdPort for ProcessClientId {
+    fn load(&self) -> Result<ClientId, AddAccountError> {
+        if ProcessEnvironment.var_os(CLIENT_ID_ENV).is_some() {
+            return ClientId::load_from(&ProcessEnvironment);
+        }
+
+        let path = std::env::current_dir()
+            .map_err(|_| config_invalid())?
+            .join(".env");
+        let metadata = fs::metadata(&path).map_err(|_| config_invalid())?;
+        if !metadata.is_file() || metadata.len() > MAX_DOTENV_BYTES {
+            return Err(config_invalid());
+        }
+        let contents = fs::read_to_string(path).map_err(|_| config_invalid())?;
+        ClientId::load_from_dotenv(&contents)
+    }
+}
+
 pub(crate) struct ClientId(String);
 
 impl ClientId {
     pub(crate) fn load() -> Result<Self, AddAccountError> {
-        Self::load_from(&ProcessEnvironment)
+        ProcessClientId.load()
     }
 
     pub(crate) fn load_from(environment: &impl Environment) -> Result<Self, AddAccountError> {
@@ -53,6 +74,36 @@ impl ClientId {
         } else {
             Err(config_invalid())
         }
+    }
+
+    fn load_from_dotenv(contents: &str) -> Result<Self, AddAccountError> {
+        let mut found = None;
+        for line in contents.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            let line = line.strip_prefix("export ").unwrap_or(line);
+            let Some((name, raw_value)) = line.split_once('=') else {
+                continue;
+            };
+            if name.trim() != CLIENT_ID_ENV {
+                continue;
+            }
+            if found.is_some() {
+                return Err(config_invalid());
+            }
+            let raw_value = raw_value.trim();
+            let value = match (raw_value.as_bytes().first(), raw_value.as_bytes().last()) {
+                (Some(b'\''), Some(b'\'')) | (Some(b'"'), Some(b'"')) if raw_value.len() >= 2 => {
+                    &raw_value[1..raw_value.len() - 1]
+                }
+                _ => raw_value,
+            };
+            found = Some(value.to_owned());
+        }
+
+        Self::parse(found.ok_or_else(config_invalid)?)
     }
 
     pub(crate) fn as_str(&self) -> &str {
@@ -187,5 +238,35 @@ mod tests {
 
         assert_eq!(rendered, "ClientId([REDACTED])");
         assert!(!rendered.contains(VALID_CLIENT_ID));
+    }
+
+    #[test]
+    fn loads_only_the_client_id_from_local_dotenv_syntax() {
+        for contents in [
+            format!("ZEROCHI_GOOGLE_CLIENT_ID={VALID_CLIENT_ID}\n"),
+            format!("export ZEROCHI_GOOGLE_CLIENT_ID=\"{VALID_CLIENT_ID}\"\n"),
+            format!(
+                "VITE_ZEROCHI_GOOGLE_CLIENT_ID=ignored\nZEROCHI_GOOGLE_CLIENT_SECRET=ignored\nZEROCHI_GOOGLE_CLIENT_ID='{VALID_CLIENT_ID}'\n"
+            ),
+        ] {
+            let client_id = ClientId::load_from_dotenv(&contents).expect("dotenv client id");
+            assert_eq!(client_id.as_str(), VALID_CLIENT_ID);
+        }
+    }
+
+    #[test]
+    fn dotenv_missing_duplicate_or_malformed_client_id_fails_without_echoing_values() {
+        for contents in [
+            "VITE_ZEROCHI_GOOGLE_CLIENT_ID=fixture-only".to_owned(),
+            format!(
+                "ZEROCHI_GOOGLE_CLIENT_ID={VALID_CLIENT_ID}\nZEROCHI_GOOGLE_CLIENT_ID={VALID_CLIENT_ID}"
+            ),
+            "ZEROCHI_GOOGLE_CLIENT_ID=fixture-invalid".to_owned(),
+        ] {
+            let error = ClientId::load_from_dotenv(&contents).unwrap_err();
+            assert_eq!(error.tag(), AddAccountErrorTag::ConfigInvalid);
+            assert!(!format!("{error:?} {error}").contains("fixture-invalid"));
+            assert!(!format!("{error:?} {error}").contains(VALID_CLIENT_ID));
+        }
     }
 }
