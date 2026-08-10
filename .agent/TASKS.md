@@ -29,8 +29,8 @@ Status markers: `[ ]` ready, `[>]` active, `[x]` complete, `[!]` blocked. Lead a
 
 ## Active assignments — first parallel wave
 
-- [>] `gmail`: document the M4 desktop PKCE sequence and sanitized error model under `src-tauri/src/auth/**`; design only, with no OAuth implementation or contract changes.
-- [>] `tauri`: implement M1 popup/tray lifecycle under `src-tauri/src/tray/**`: hidden startup, click-to-show/focus, blur/close-to-hide, macOS Dock suppression, and an explicit Quit tray action.
-- [>] `ui`: extract the M1 popup presentation and a testable visibility store using existing DTOs, with the coordinated `src/App.tsx` composition change only.
-- [>] `pet`: implement a pure deterministic pet-event queue with idle fallback and boundary/replacement tests under `src/pet/**`; no UI wiring or shared-contract changes.
-- [>] `qa`: perform the M0 security/performance baseline audit and commit the reproducible findings report at `docs/qa/M0_BASELINE.md`; production fixes remain with owners.
+- [x] `gmail`: document the M4 desktop PKCE sequence and sanitized error model under `src-tauri/src/auth/**`; design only, with no OAuth implementation or contract changes. Commit `d6ef64d`.
+- [x] `tauri`: implement M1 popup/tray lifecycle under `src-tauri/src/tray/**`: hidden startup, click-to-show/focus, blur/close-to-hide, macOS Dock suppression, and an explicit Quit tray action. Commit `c96239f`.
+- [x] `ui`: extract the M1 popup presentation and a testable visibility store using existing DTOs, with the coordinated `src/App.tsx` composition change only. Commit `def8fa7`.
+- [x] `pet`: implement a pure deterministic pet-event queue with idle fallback and boundary/replacement tests under `src/pet/**`; no UI wiring or shared-contract changes. Commit `cfcdf36`.
+- [x] `qa`: perform the M0 security/performance baseline audit and commit the reproducible findings report at `docs/qa/M0_BASELINE.md`; production fixes remain with owners. Commit `b4d9641`.
