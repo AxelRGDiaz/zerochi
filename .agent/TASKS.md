@@ -8,7 +8,7 @@ Status markers: `[ ]` ready, `[>]` active, `[x]` complete, `[!]` blocked. Lead a
 - **M1 Menu bar + UI mock:** [>] `ui` extract popup view and visibility state; [>] `tauri` show/hide/focus popup and tray menu; [ ] `qa` lifecycle/accessibility review.
 - **M2 PetEngine mock:** [>] `pet` add event queue/idle fallback tests; [ ] `qa` property/boundary tests.
 - **M3 Sprite renderer:** [ ] `pet` add placeholder development sheet and visibility/completion tests; no final art.
-- **M4 OAuth single account:** [x] `lead` approve environment/secure-store direction and `add_account` DTO/error contract; [>] `gmail` Rust-side env validation and desktop PKCE core; [>] `tauri` Keychain adapter; [>] `qa` token/config acceptance audit.
+- **M4 OAuth single account:** [x] `lead` approve environment/secure-store direction and `add_account` DTO/error contract; [x] `gmail` Rust-side env validation and desktop PKCE core; [x] `tauri` Keychain adapter; [>] live OAuth adapters/orchestration and empty-account UI; [ ] final QA token/config audit.
 - **M5 OAuth multicuenta:** [ ] `gmail` independent account credentials/revocation; [ ] `ui` account management.
 - **M6 Initial sync:** [ ] `gmail` metadata baseline that creates zero historical pending; [ ] `qa` large mailbox tests.
 - **M7 Incremental sync:** [ ] `gmail` history pagination, cursor commit, 404 recovery, backoff, poll mutex.
@@ -47,3 +47,11 @@ Status markers: `[ ]` ready, `[>]` active, `[x]` complete, `[!]` blocked. Lead a
 
 - [x] `ui`: add internal popup navigation, a dedicated Add account provider view with Gmail as the only enabled provider, a dedicated Settings view, accessible back navigation, and a materially larger settings gear/control; preserve the existing Add account controller and contracts. Commits `4fc1a5f`, `09676fd`, `9be231f`; integrated in `main` at `1e24058`.
 - [x] `qa`: review keyboard navigation, focus, disabled-provider semantics, compact layout, dark mode, and accessible control sizing. Final green report `cb6735f`; integrated in `main`.
+
+## Active assignments — live Gmail OAuth and empty state
+
+- [>] `gmail`: implement the live single-account OAuth orchestration and owned loopback/HTTP/identity/account-state adapters against the approved foundation; load the local Rust-only client ID without exposing it, exchange with Google using PKCE, return a normalized account, and persist no secrets outside `SecureStore`.
+- [>] `tauri`: implement the native non-logging browser adapter and Keychain/auth port bridge required by the Gmail orchestrator, with explicit unsigned-development versus signed deployment behavior.
+- [>] `ui`: remove mock-account seeding, render an accessible no-accounts state with a clear Gmail onboarding action, and preserve the internal scrolling/account views after a successful add.
+- [ ] `qa`: after the three owner commits and Lead command integration, run the M4 acceptance plan and block any token/config exposure, callback weakness, storage-order issue, or inaccessible empty state.
+- [ ] `lead`: integrate the owner commits, wire the stable zero-argument Tauri `add_account` command and managed state, run contract/security tests, then dispatch QA.
