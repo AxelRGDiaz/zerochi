@@ -50,8 +50,8 @@ Status markers: `[ ]` ready, `[>]` active, `[x]` complete, `[!]` blocked. Lead a
 
 ## Active assignments — live Gmail OAuth and empty state
 
-- [>] `gmail`: implement the live single-account OAuth orchestration and owned loopback/HTTP/identity/account-state adapters against the approved foundation; load the local Rust-only client ID without exposing it, exchange with Google using PKCE, return a normalized account, and persist no secrets outside `SecureStore`.
-- [>] `tauri`: implement the native non-logging browser adapter and Keychain/auth port bridge required by the Gmail orchestrator, with explicit unsigned-development versus signed deployment behavior.
-- [>] `ui`: remove mock-account seeding, render an accessible no-accounts state with a clear Gmail onboarding action, and preserve the internal scrolling/account views after a successful add.
-- [ ] `qa`: after the three owner commits and Lead command integration, run the M4 acceptance plan and block any token/config exposure, callback weakness, storage-order issue, or inaccessible empty state.
-- [ ] `lead`: integrate the owner commits, wire the stable zero-argument Tauri `add_account` command and managed state, run contract/security tests, then dispatch QA.
+- [x] `gmail`: live single-account PKCE orchestration, bounded loopback callback, TLS token/identity adapters, normalized account state, and compensating Keychain deletion. Commit `55f08cf`; integrated at `8da2985`.
+- [x] `tauri`: non-logging browser adapter and explicit Keychain/auth bridge, reconciled to the final typed UUID set/delete contract. Commits `5935d55`, `9b6e99b`; integrated at `b24d833`, `c2932f6`.
+- [x] `ui`: production starts with zero accounts and renders accessible onboarding without invoking OAuth before Gmail selection; success restores the internally scrolling account list. Commit `c7ad963`; integrated at `c017f62`.
+- [>] `qa`: run the final integrated M4 acceptance plan and block any token/config exposure, callback weakness, storage-order issue, inaccessible empty state, or contract mismatch.
+- [x] `lead`: approve the Rustls HTTP dependency, integrate owner commits, and wire the stable zero-argument Tauri `add_account` command/managed state. Commits `810c80d`, `02d6851`; cross-boundary suites green before final QA.
