@@ -31,6 +31,7 @@ describe("PopupView", () => {
   it("renders the existing popup content and live summary while active", () => {
     const markup = renderPopup(true);
 
+    expect(markup).toContain('<main class="app-shell home-popup">');
     expect(markup).toContain("YOUR INBOX PET");
     expect(markup).toContain("ZEROCHI");
     expect(markup).toContain("Tengo 2 mails");
