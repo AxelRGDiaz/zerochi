@@ -58,6 +58,6 @@ Status markers: `[ ]` ready, `[>]` active, `[x]` complete, `[!]` blocked. Lead a
 
 ## Active assignments — M4 QA remediation
 
-- [>] `gmail`: resolve M4-FINAL-01 and M4-FINAL-02 with durable atomic non-secret account persistence plus strict bound-authority Host validation; add restart/corruption/hostile-callback tests without changing commands or root configuration.
-- [ ] `lead`: inject the app-data account path after the Gmail owner commit and rerun cross-boundary suites.
-- [ ] `qa`: re-audit the two remediated findings; M4-FINAL-03 through M4-FINAL-07 remain separately tracked in `docs/qa/M4_FINAL_IMPLEMENTATION_AUDIT.md`.
+- [x] `gmail`: resolve M4-FINAL-01 and M4-FINAL-02 with durable atomic non-secret account persistence plus strict bound-authority Host validation. Commit `5f08b91`; integrated at `c438a7d`.
+- [x] `lead`: inject `app.path().app_data_dir()/accounts.json` into the live command state and rerun cross-boundary suites. Commit `1302348`.
+- [x] `qa`: targeted re-audit closes M4-FINAL-01 and M4-FINAL-02 at `f3cc7bd`; integrated at `ead93fd`. M4-FINAL-03 through M4-FINAL-07 remain separately tracked in `docs/qa/M4_FINAL_IMPLEMENTATION_AUDIT.md`.
