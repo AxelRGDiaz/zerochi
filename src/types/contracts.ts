@@ -25,3 +25,30 @@ export interface AppSnapshot {
   accounts: MailAccount[];
   messages: MailMessage[];
 }
+
+export type AddAccountErrorTag =
+  | "auth_in_progress"
+  | "browser_open_failed"
+  | "callback_invalid"
+  | "cancelled"
+  | "config_invalid"
+  | "identity_invalid"
+  | "internal"
+  | "network_unavailable"
+  | "provider_denied"
+  | "refresh_token_missing"
+  | "secure_store_failed"
+  | "timeout"
+  | "token_exchange_failed"
+  | "workspace_restricted";
+
+export interface CommandError<Tag extends string = string> {
+  tag: Tag;
+  message: string;
+  retryable: boolean;
+  actionRequired: boolean;
+}
+
+export interface AddAccountResult {
+  account: MailAccount;
+}
