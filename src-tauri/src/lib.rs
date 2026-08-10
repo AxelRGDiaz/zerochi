@@ -16,7 +16,12 @@ pub fn run() {
         .setup(|app| {
             use tauri::Manager;
 
-            let state = commands::AppState::new()
+            let accounts_path = app
+                .path()
+                .app_data_dir()
+                .map_err(|_| std::io::Error::other("Account storage is unavailable"))?
+                .join("accounts.json");
+            let state = commands::AppState::new(accounts_path)
                 .map_err(|_| std::io::Error::other("OAuth services are unavailable"))?;
             app.manage(state);
             tray::setup(app)

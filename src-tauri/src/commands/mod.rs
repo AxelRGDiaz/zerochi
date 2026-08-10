@@ -1,17 +1,17 @@
 //! Stable React/Tauri command DTO boundary.
 
 use crate::{
-    accounts::{InMemoryAccountState, MailAccount},
+    accounts::{JsonAccountState, MailAccount},
     auth::{
-        AddAccountError, AddAccountPorts, AddAccountService, LoopbackCallbackPort, OsAccountId,
-        OsRandom, ProcessClientId,
+        AddAccountError, AddAccountErrorTag, AddAccountPorts, AddAccountService,
+        LoopbackCallbackPort, OsAccountId, OsRandom, ProcessClientId,
     },
     gmail::GoogleHttpClient,
     navigation::MacOsBrowserPort,
     secure_store::SecureRefreshTokenStorePort,
 };
 use serde::Serialize;
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 use tauri::State;
 
 pub(crate) struct AppState {
@@ -19,8 +19,10 @@ pub(crate) struct AppState {
 }
 
 impl AppState {
-    pub(crate) fn new() -> Result<Self, AddAccountError> {
+    pub(crate) fn new(accounts_path: PathBuf) -> Result<Self, AddAccountError> {
         let google = Arc::new(GoogleHttpClient::new()?);
+        let accounts = JsonAccountState::new(accounts_path)
+            .map_err(|_| AddAccountError::from_tag(AddAccountErrorTag::Internal))?;
         let refresh_tokens = if cfg!(debug_assertions) {
             SecureRefreshTokenStorePort::unsigned_development()?
         } else {
@@ -36,7 +38,7 @@ impl AppState {
                 token_exchange: google.clone(),
                 identity: google,
                 refresh_tokens: Arc::new(refresh_tokens),
-                accounts: Arc::new(InMemoryAccountState::default()),
+                accounts: Arc::new(accounts),
                 account_ids: Arc::new(OsAccountId),
             }),
         })
