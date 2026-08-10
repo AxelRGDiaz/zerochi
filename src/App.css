@@ -46,10 +46,27 @@ h1:focus { outline: 2px solid #9b746a; outline-offset: 4px; }
 .settings-copy h2 { margin: 0 0 6px; font-size: 14px; }
 .settings-copy p { margin: 0; color: #795f66; font-size: 12px; line-height: 1.45; }
 @media (prefers-color-scheme: dark) {
-  :root { color: #f4e9df; background: #211b20; }
-  .app-shell { background: radial-gradient(circle at 50% 20%, #392d30 0 22%, transparent 48%), #211b20; }
+  :root {
+    --dark-surface: #211b20;
+    --dark-raised-surface: #392d30;
+    --dark-secondary-text: #c5b4b7;
+    --dark-disabled-text: #a89498;
+    color: #f4e9df;
+    background: var(--dark-surface);
+  }
+  .app-shell { background: radial-gradient(circle at 50% 20%, var(--dark-raised-surface) 0 22%, transparent 48%), var(--dark-surface); }
   .account-row { border-color: #4b3d40; background: rgba(57, 45, 48, .8); }
   .account-row:hover { background: #453538; }
   .account-count { background: #e4b983; color: #302329; }
   .provider-button, .settings-copy section { border-color: #4b3d40; background: rgba(57, 45, 48, .8); }
+  .app-footer button,
+  .back-button,
+  .subview-intro,
+  .provider-state,
+  .add-account-status,
+  .retry-button,
+  .settings-copy p { color: var(--dark-secondary-text); }
+  .provider-button:disabled { color: var(--dark-disabled-text); opacity: 1; }
+  .provider-button:disabled .provider-state { color: var(--dark-disabled-text); }
+  h1:focus { outline-color: var(--dark-secondary-text); }
 }
