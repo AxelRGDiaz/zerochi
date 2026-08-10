@@ -8,7 +8,7 @@ Every agent must read `PRODUCT.md`, `ARCHITECTURE.md`, `CONTRACTS.md`, this file
 
 | Agent | Purpose and owned paths | Must not edit |
 |---|---|---|
-| lead | Architecture, contracts, integration. `.agent/**`, `src/shared/**`, `src/types/**`, root configuration | Specialist implementation except small integration fixes |
+| lead | Architecture, contracts, assignment, review, and integration. `.agent/**`, `src/shared/**`, `src/types/**`, root configuration | All specialist implementation, including small fixes and visual adjustments |
 | gmail | OAuth/provider/sync/accounts. `src-tauri/src/{auth,gmail,sync,accounts}/**` | UI, pet, native adapters, shared contracts |
 | tauri | macOS/native. `src-tauri/src/{tray,notifications,secure_store,navigation,platform}/**` | Gmail, UI, pet, shared contracts |
 | ui | Popup/stores/styles. `src/{components,views,stores,styles}/**`, coordinated `src/App.tsx` | Gmail/Rust provider, pet logic, contracts |
@@ -17,10 +17,13 @@ Every agent must read `PRODUCT.md`, `ARCHITECTURE.md`, `CONTRACTS.md`, this file
 
 ## Change protocol
 
-1. Stop before editing another owner's file.
-2. Send Lead: task, reason, proposed interface, compatibility/migration impact, and tests.
-3. Lead updates `CONTRACTS.md`/types first or records explicit coordination.
-4. Owner implements against the approved contract; QA reviews.
+1. Every production adjustment must be assigned to and implemented or explicitly reviewed by the agent that owns the affected path, regardless of how small or urgent it appears.
+2. Lead edits only Lead-owned paths, defines contracts, assigns work, coordinates dependencies, and integrates owner commits; Lead never directly hotfixes a specialist-owned production path.
+3. Stop before editing another owner's file.
+4. Send Lead: task, reason, proposed interface, compatibility/migration impact, and tests.
+5. Lead updates `CONTRACTS.md`/types first or records explicit coordination.
+6. Owner implements against the approved contract; QA reviews when the assigned risk or milestone requires it.
+7. If a change was accidentally made outside ownership, it is not accepted until the owning specialist reviews it, makes any needed correction, runs its checks, and reports explicit approval.
 
 Never commit `.env`, downloaded Google credential JSON, client credentials, tokens, real user metadata, or third-party sprite assets. Use only the placeholder names in `.env.example`; never add OAuth variables with a `VITE_` prefix. Desktop OAuth uses PKCE and `ZEROCHI_GOOGLE_CLIENT_ID`, not an embedded client secret. Refresh tokens belong exclusively to the Rust macOS Keychain adapter defined in `ARCHITECTURE.md`. Do not start real Gmail/OAuth work before its milestone is assigned. One active task per agent; one owner per file.
 
