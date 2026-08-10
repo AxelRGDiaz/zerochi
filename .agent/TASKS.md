@@ -45,5 +45,5 @@ Status markers: `[ ]` ready, `[>]` active, `[x]` complete, `[!]` blocked. Lead a
 
 ## Active assignment — account and settings views
 
-- [>] `ui`: add internal popup navigation, a dedicated Add account provider view with Gmail as the only enabled provider, a dedicated Settings view, accessible back navigation, and a materially larger settings gear/control; preserve the existing Add account controller and contracts.
-- [ ] `qa`: after the UI commit, review keyboard navigation, focus, disabled-provider semantics, compact layout, dark mode, and accessible control sizing.
+- [x] `ui`: add internal popup navigation, a dedicated Add account provider view with Gmail as the only enabled provider, a dedicated Settings view, accessible back navigation, and a materially larger settings gear/control; preserve the existing Add account controller and contracts. Commits `4fc1a5f`, `09676fd`, `9be231f`; integrated in `main` at `1e24058`.
+- [x] `qa`: review keyboard navigation, focus, disabled-provider semantics, compact layout, dark mode, and accessible control sizing. Final green report `cb6735f`; integrated in `main`.
