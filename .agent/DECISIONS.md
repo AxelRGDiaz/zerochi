@@ -18,6 +18,7 @@
 | 014 | Native macOS Keychain is the V1 secure store | Rust uses `keyring-core` + `apple-native-keyring-store`; Protected Data for signed builds, legacy adapter only for unsigned development; Stronghold is unnecessary in V1. |
 | 015 | Google app configuration is local and Rust-only | `.env` contains only `ZEROCHI_GOOGLE_CLIENT_ID`; Google JSON and `.env` are ignored; no `VITE_` OAuth variables or embedded desktop client secret. |
 | 016 | Herdr topology is repository-defined and idempotent | `.agent/herdr-agents.json` defines six globally named agents; a safe bootstrap creates one main workspace plus five isolated short-lived worktrees and only performs onboarding. |
+| 017 | `add_account` is a zero-argument Rust-owned OAuth command | UI receives only a normalized `MailAccount` or a sanitized tagged error; OAuth configuration and secrets never cross into React. V1 serializes add attempts. |
 
 ## Pending decisions
 
