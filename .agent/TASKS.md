@@ -37,8 +37,13 @@ Status markers: `[ ]` ready, `[>]` active, `[x]` complete, `[!]` blocked. Lead a
 
 ## Active assignments — Add account foundation
 
-- [>] `gmail`: implement the M4 Rust-only client-ID validator, sanitized auth error model, PKCE/state generation, authorization request construction, and deterministic injected-port tests under owned auth/account paths; no live token persistence or command wiring yet.
-- [>] `tauri`: implement and test the M4/M13 `SecureStore` macOS Keychain adapter under `src-tauri/src/secure_store/**`, including protected-data versus unsigned-development selection, UUID isolation, redaction, deletion, and zeroization.
-- [>] `ui`: implement the Add account controller and accessible pending/success/error/cancelled presentation on top of the approved zero-argument command contract, preserving mockability and preventing duplicate clicks.
-- [>] `qa`: review the approved M4 contract/design and commit a reproducible Add account security acceptance plan; production fixes remain with owners.
+- [x] `gmail`: implement the M4 Rust-only client-ID validator, sanitized auth error model, PKCE/state generation, authorization request construction, and deterministic injected-port tests under owned auth/account paths; no live token persistence or command wiring yet. Commit `0e3b8f9`.
+- [x] `tauri`: implement and test the M4/M13 `SecureStore` macOS Keychain adapter under `src-tauri/src/secure_store/**`, including protected-data versus unsigned-development selection, UUID isolation, redaction, deletion, and zeroization. Commit `3de02d0`.
+- [x] `ui`: implement the Add account controller and accessible pending/success/error/cancelled presentation on top of the approved zero-argument command contract, preserving mockability and preventing duplicate clicks. Commit `0c8e8a7`.
+- [x] `qa`: review the approved M4 contract/design and commit a reproducible Add account security acceptance plan; production fixes remain with owners. Commit `e02bcaf`.
 - [ ] `lead`: after green specialist commits, approve dependency changes, integrate the Rust Tauri command/browser callback seam, run cross-branch contract tests, and dispatch the implementation audit.
+
+## Active assignment — account and settings views
+
+- [>] `ui`: add internal popup navigation, a dedicated Add account provider view with Gmail as the only enabled provider, a dedicated Settings view, accessible back navigation, and a materially larger settings gear/control; preserve the existing Add account controller and contracts.
+- [ ] `qa`: after the UI commit, review keyboard navigation, focus, disabled-provider semantics, compact layout, dark mode, and accessible control sizing.
