@@ -1,0 +1,216 @@
+# Zerochi project-local command policy.
+# Keep action prefixes stable while leaving destructive, external, installation,
+# credential, and network operations to Smart approvals.
+
+prefix_rule(
+    pattern = ["git", ["status", "diff", "log", "show", "rev-parse", "ls-files"]],
+    decision = "allow",
+    justification = "Read-only Git inspection inside the Zerochi project",
+    match = [
+        "git status --short",
+        "git diff --check",
+        "git log -2 --oneline",
+        "git show --stat HEAD",
+        "git rev-parse --verify HEAD",
+        "git ls-files .agent",
+    ],
+    not_match = [
+        "git push origin main",
+        "git reset --hard",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "add"],
+    decision = "allow",
+    justification = "Stage ownership-safe Zerochi changes without path-specific approvals",
+    match = [
+        "git add .agent/AGENTS.md",
+        "git add src/App.tsx src/App.css",
+    ],
+    not_match = [
+        "git commit -m release",
+        "git reset --hard",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "add", ["-f", "--force"]],
+    decision = "prompt",
+    justification = "Force-adding can bypass ignore rules that protect credentials and local files",
+    match = [
+        "git add -f .env",
+        "git add --force credentials.json",
+    ],
+    not_match = [
+        "git add src/App.tsx",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "commit", ["-m", "--message", "--no-edit"]],
+    decision = "allow",
+    justification = "Create ordinary Zerochi commits independently of the commit message",
+    match = [
+        "git commit -m feat-one",
+        "git commit --message feat-two",
+        "git commit --no-edit",
+    ],
+    not_match = [
+        "git commit --amend",
+        "git push origin main",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "commit", "--amend"],
+    decision = "prompt",
+    justification = "Amending rewrites local history and requires case-by-case review",
+    match = [
+        "git commit --amend --no-edit",
+    ],
+    not_match = [
+        "git commit -m feat-one",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", ["merge", "cherry-pick"]],
+    decision = "allow",
+    justification = "Allow Lead-owned local integration while push and history rewrites stay reviewed",
+    match = [
+        "git merge --no-edit main",
+        "git cherry-pick abc1234",
+    ],
+    not_match = [
+        "git rebase main",
+        "git push origin main",
+    ],
+)
+
+prefix_rule(
+    pattern = ["npm", "test"],
+    decision = "allow",
+    justification = "Run the repository test suite",
+    match = [
+        "npm test",
+        "npm test -- --runInBand",
+    ],
+    not_match = [
+        "npm install",
+    ],
+)
+
+prefix_rule(
+    pattern = ["npm", "run", ["check", "build", "herdr:dry-run", "herdr:setup", "herdr:reprompt"]],
+    decision = "allow",
+    justification = "Run known Zerochi validation and Herdr lifecycle scripts",
+    match = [
+        "npm run check",
+        "npm run build",
+        "npm run herdr:dry-run",
+        "npm run herdr:setup",
+        "npm run herdr:reprompt",
+    ],
+    not_match = [
+        "npm run herdr",
+        "npm install",
+    ],
+)
+
+prefix_rule(
+    pattern = ["cargo", ["check", "test"]],
+    decision = "allow",
+    justification = "Run Rust compilation and tests for Zerochi",
+    match = [
+        "cargo check",
+        "cargo test --all-targets",
+    ],
+    not_match = [
+        "cargo install cargo-edit",
+    ],
+)
+
+prefix_rule(
+    pattern = ["cargo", "fmt", "--check"],
+    decision = "allow",
+    justification = "Check Rust formatting without rewriting files",
+    match = [
+        "cargo fmt --check",
+    ],
+    not_match = [
+        "cargo fmt",
+        "cargo install rustfmt",
+    ],
+)
+
+prefix_rule(
+    pattern = ["herdr", "agent"],
+    decision = "allow",
+    justification = "Coordinate the six declared Zerochi agents",
+    match = [
+        "herdr agent list",
+        "herdr agent prompt zerochi-qa review",
+        "herdr agent wait zerochi-gmail --timeout 1000",
+    ],
+    not_match = [
+        "herdr worktree remove codex-gmail-m1",
+    ],
+)
+
+prefix_rule(
+    pattern = ["herdr", "api", ["snapshot", "schema"]],
+    decision = "allow",
+    justification = "Inspect local Herdr runtime metadata",
+    match = [
+        "herdr api snapshot",
+        "herdr api schema",
+    ],
+    not_match = [
+        "herdr server stop",
+    ],
+)
+
+prefix_rule(
+    pattern = ["herdr", "pane", ["list", "current", "get", "layout", "process-info", "neighbor", "edges", "focus", "resize", "zoom", "read", "rename", "split", "swap", "move", "wait-output", "report-agent", "report-agent-session", "report-metadata"]],
+    decision = "allow",
+    justification = "Inspect and arrange Zerochi panes without executing commands or closing panes",
+    match = [
+        "herdr pane list",
+        "herdr pane move w3:p1 --tab w2:t1",
+        "herdr pane read zerochi-lead --lines 40",
+    ],
+    not_match = [
+        "herdr pane close w2:p1",
+        "herdr pane run w2:p1 rm -rf build",
+        "herdr pane send-keys w2:p1 enter",
+    ],
+)
+
+prefix_rule(
+    pattern = ["herdr", "workspace", ["list", "create", "get", "focus", "rename", "report-metadata"]],
+    decision = "allow",
+    justification = "Inspect and arrange declared Zerochi workspaces without closing them",
+    match = [
+        "herdr workspace list",
+        "herdr workspace create --cwd /tmp/zerochi --label zerochi-test",
+        "herdr workspace focus zerochi-lead",
+    ],
+    not_match = [
+        "herdr workspace close zerochi-lead",
+    ],
+)
+
+prefix_rule(
+    pattern = ["herdr", "worktree", ["list", "create", "open"]],
+    decision = "allow",
+    justification = "Create or open declared Zerochi worktrees while removal stays reviewed",
+    match = [
+        "herdr worktree list",
+        "herdr worktree create --cwd /tmp/zerochi --branch codex/test --base main",
+        "herdr worktree open --cwd /tmp/zerochi --branch codex/test",
+    ],
+    not_match = [
+        "herdr worktree remove codex/test",
+    ],
+)
