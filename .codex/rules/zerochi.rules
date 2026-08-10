@@ -21,12 +21,12 @@ prefix_rule(
 )
 
 prefix_rule(
-    pattern = ["git", "add"],
+    pattern = ["git", "add", "--"],
     decision = "allow",
     justification = "Stage ownership-safe Zerochi changes without path-specific approvals",
     match = [
-        "git add .agent/AGENTS.md",
-        "git add src/App.tsx src/App.css",
+        "git add -- .agent/AGENTS.md",
+        "git add -- src/App.tsx src/App.css",
     ],
     not_match = [
         "git commit -m release",
@@ -43,18 +43,17 @@ prefix_rule(
         "git add --force credentials.json",
     ],
     not_match = [
-        "git add src/App.tsx",
+        "git add -- src/App.tsx",
     ],
 )
 
 prefix_rule(
-    pattern = ["git", "commit", ["-m", "--message", "--no-edit"]],
+    pattern = ["git", "commit", ["-m", "--message"]],
     decision = "allow",
     justification = "Create ordinary Zerochi commits independently of the commit message",
     match = [
         "git commit -m feat-one",
         "git commit --message feat-two",
-        "git commit --no-edit",
     ],
     not_match = [
         "git commit --amend",
