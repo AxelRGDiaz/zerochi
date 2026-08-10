@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { darkPalette } from "./darkPalette";
+import { lightPalette } from "./lightPalette";
 
 interface Rgb {
   red: number;
@@ -80,5 +81,32 @@ describe("dark theme contrast", () => {
 
   it("keeps primary provider and settings text compliant on the darkest raised surface", () => {
     expect(contrastRatio(darkPalette.primaryText, darkPalette.raisedSurface)).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+describe("light theme active provider contrast", () => {
+  const effectivePanelOnSurface = composite(
+    lightPalette.panelLayer,
+    lightPalette.surface,
+    lightPalette.panelLayerAlpha,
+  );
+  const effectivePanelOnRaisedSurface = composite(
+    lightPalette.panelLayer,
+    lightPalette.raisedSurface,
+    lightPalette.panelLayerAlpha,
+  );
+
+  it("tracks both effective translucent provider surfaces", () => {
+    expect(effectivePanelOnSurface).toBe("#fcf8f2");
+    expect(effectivePanelOnRaisedSurface).toBe("#fffbf6");
+  });
+
+  it.each([
+    ["base shell", effectivePanelOnSurface, 5.4502],
+    ["radial highlight", effectivePanelOnRaisedSurface, 5.5967],
+  ])("keeps the active Gmail state compliant over the %s panel", (_name, background, expectedRatio) => {
+    const ratio = contrastRatio(lightPalette.activeProviderState, background);
+    expect(ratio).toBeCloseTo(expectedRatio, 3);
+    expect(ratio).toBeGreaterThanOrEqual(4.5);
   });
 });

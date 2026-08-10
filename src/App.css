@@ -1,4 +1,5 @@
 :root {
+  --light-active-provider-state: #795f66;
   color: #3a2d35;
   background: #f4eee6;
   font-family: ui-rounded, "SF Pro Rounded", "SF Pro Display", system-ui, sans-serif;
@@ -38,7 +39,7 @@ h1:focus { outline: 2px solid #9b746a; outline-offset: 4px; }
 .provider-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
 .provider-button { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 54px; padding: 12px 14px; border: 1px solid #e0d3c5; border-radius: 14px; color: inherit; background: rgba(255, 252, 247, .72); cursor: pointer; font-weight: 700; }
 .provider-button:disabled { cursor: not-allowed; opacity: .58; }
-.provider-state { color: #927d80; font-size: 11px; font-weight: 600; }
+.provider-state { color: var(--light-active-provider-state); font-size: 11px; font-weight: 600; }
 .add-account-status { margin: 14px 0 0; color: #795f66; font-size: 12px; line-height: 1.4; }
 .retry-button { min-height: 44px; margin-top: 8px; border: 0; color: #795f66; background: transparent; cursor: pointer; font-size: 12px; font-weight: 700; }
 .settings-copy { display: grid; gap: 14px; margin-top: 28px; }
