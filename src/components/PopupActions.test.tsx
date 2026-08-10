@@ -25,4 +25,13 @@ describe("PopupActions", () => {
     expect(markup).toContain('style="min-height:44px;min-width:44px"');
     expect(markup).toContain('style="font-size:23px"');
   });
+
+  it("identifies both footer controls for comfortable target sizing", () => {
+    const markup = renderActions();
+
+    expect(markup).toContain('class="add-account-button"');
+    expect(markup).toContain('aria-label="Agregar cuenta"');
+    expect(markup).toContain('style="min-height:44px"');
+    expect(markup).toContain('class="settings-button"');
+  });
 });

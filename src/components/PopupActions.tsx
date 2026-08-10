@@ -6,7 +6,15 @@ interface PopupActionsProps {
 export function PopupActions({ onOpenAddAccount, onOpenSettings }: PopupActionsProps) {
   return (
     <footer className="app-footer">
-      <button type="button" aria-label="Agregar cuenta" onClick={onOpenAddAccount}>＋ Agregar cuenta</button>
+      <button
+        className="add-account-button"
+        type="button"
+        aria-label="Agregar cuenta"
+        onClick={onOpenAddAccount}
+        style={{ minHeight: 44 }}
+      >
+        ＋ Agregar cuenta
+      </button>
       <button
         className="settings-button"
         type="button"
