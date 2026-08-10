@@ -55,3 +55,9 @@ Status markers: `[ ]` ready, `[>]` active, `[x]` complete, `[!]` blocked. Lead a
 - [x] `ui`: production starts with zero accounts and renders accessible onboarding without invoking OAuth before Gmail selection; success restores the internally scrolling account list. Commit `c7ad963`; integrated at `c017f62`.
 - [>] `qa`: run the final integrated M4 acceptance plan and block any token/config exposure, callback weakness, storage-order issue, inaccessible empty state, or contract mismatch.
 - [x] `lead`: approve the Rustls HTTP dependency, integrate owner commits, and wire the stable zero-argument Tauri `add_account` command/managed state. Commits `810c80d`, `02d6851`; cross-boundary suites green before final QA.
+
+## Active assignments — M4 QA remediation
+
+- [>] `gmail`: resolve M4-FINAL-01 and M4-FINAL-02 with durable atomic non-secret account persistence plus strict bound-authority Host validation; add restart/corruption/hostile-callback tests without changing commands or root configuration.
+- [ ] `lead`: inject the app-data account path after the Gmail owner commit and rerun cross-boundary suites.
+- [ ] `qa`: re-audit the two remediated findings; M4-FINAL-03 through M4-FINAL-07 remain separately tracked in `docs/qa/M4_FINAL_IMPLEMENTATION_AUDIT.md`.
