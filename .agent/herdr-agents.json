@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "project": "zerochi",
+  "base": "HEAD",
+  "agents": [
+    {
+      "name": "zerochi-lead",
+      "role": "lead",
+      "workspace": "zerochi-lead",
+      "checkout": "main",
+      "prompt": ".agent/prompts/lead.md"
+    },
+    {
+      "name": "zerochi-gmail",
+      "role": "gmail",
+      "workspace": "zerochi-gmail",
+      "checkout": "worktree",
+      "branch": "codex/gmail-m1",
+      "prompt": ".agent/prompts/gmail.md"
+    },
+    {
+      "name": "zerochi-tauri",
+      "role": "tauri",
+      "workspace": "zerochi-tauri",
+      "checkout": "worktree",
+      "branch": "codex/tauri-m1",
+      "prompt": ".agent/prompts/tauri.md"
+    },
+    {
+      "name": "zerochi-ui",
+      "role": "ui",
+      "workspace": "zerochi-ui",
+      "checkout": "worktree",
+      "branch": "codex/ui-m1",
+      "prompt": ".agent/prompts/ui.md"
+    },
+    {
+      "name": "zerochi-pet",
+      "role": "pet",
+      "workspace": "zerochi-pet",
+      "checkout": "worktree",
+      "branch": "codex/pet-m1",
+      "prompt": ".agent/prompts/pet.md"
+    },
+    {
+      "name": "zerochi-qa",
+      "role": "qa",
+      "workspace": "zerochi-qa",
+      "checkout": "worktree",
+      "branch": "codex/qa-m1",
+      "prompt": ".agent/prompts/qa.md"
+    }
+  ]
+}
