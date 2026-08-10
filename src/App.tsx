@@ -1,15 +1,15 @@
 import "./App.css";
 import { presentPet } from "./pet/PetEngine";
 import { createAddAccountController, useAddAccountController } from "./stores/addAccountController";
+import { completeAddAccountAttempt } from "./stores/addAccountFlow";
 import { appNavigationStore, useAppNavigation } from "./stores/appNavigationStore";
-import { mockAccounts } from "./stores/mockState";
 import { usePopupVisibility } from "./stores/popupVisibilityStore";
 import { invokeAddAccount } from "./stores/tauriAddAccount";
 import { ProviderSelectionView } from "./views/ProviderSelectionView";
 import { PopupView } from "./views/PopupView";
 import { SettingsView } from "./views/SettingsView";
 
-const addAccountController = createAddAccountController(invokeAddAccount, mockAccounts);
+const addAccountController = createAddAccountController(invokeAddAccount);
 
 function App() {
   const { isActive } = usePopupVisibility();
@@ -27,9 +27,17 @@ function App() {
     return (
       <ProviderSelectionView
         addAccountState={addAccountState}
-        onAddGmail={() => void addAccountController.addAccount()}
+        onAddGmail={() => void completeAddAccountAttempt(
+          addAccountController,
+          addAccountController.addAccount,
+          appNavigationStore.back,
+        )}
         onBack={appNavigationStore.back}
-        onRetry={() => void addAccountController.retry()}
+        onRetry={() => void completeAddAccountAttempt(
+          addAccountController,
+          addAccountController.retry,
+          appNavigationStore.back,
+        )}
       />
     );
   }

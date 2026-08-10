@@ -1,6 +1,8 @@
 :root {
   --light-active-provider-state: #795f66;
   --focus-ring: #795f66;
+  --empty-action-background: #593f46;
+  --empty-action-text: #ffffff;
   color: #3a2d35;
   background: #f4eee6;
   font-family: ui-rounded, "SF Pro Rounded", "SF Pro Display", system-ui, sans-serif;
@@ -14,6 +16,12 @@ button { font: inherit; }
 :where(button, a[href], input, select, textarea, [contenteditable]:not([contenteditable="false"]), [tabindex]:not([tabindex="-1"])):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .app-shell { width: min(100%, 390px); min-height: 100vh; margin: 0 auto; padding: 28px 24px 20px; background: radial-gradient(circle at 50% 20%, #fffaf2 0 22%, transparent 48%), #f4eee6; }
 .home-popup { display: grid; grid-template-rows: auto auto auto minmax(0, 1fr) auto; height: 100vh; min-height: 0; overflow: hidden; }
+.home-popup > .app-header { grid-row: 1; }
+.home-popup > .pet-stage { grid-row: 2; }
+.home-popup > .summary { grid-row: 3; }
+.home-popup > .account-list { grid-row: 4; }
+.home-popup > .empty-account-state { grid-row: 3 / 5; }
+.home-popup > .app-footer { grid-row: 5; }
 .app-header { text-align: center; }
 .eyebrow { margin: 0; color: #9b746a; font-size: 10px; font-weight: 800; letter-spacing: .2em; }
 h1 { margin: 5px 0 22px; font-size: 24px; letter-spacing: .12em; }
@@ -32,6 +40,10 @@ h1[tabindex="-1"]:focus { outline: none; }
 .account-name { display: grid; min-width: 0; gap: 2px; font-size: 14px; font-weight: 700; }
 .account-name small { overflow: hidden; color: #927d80; font-size: 10px; font-weight: 500; text-overflow: ellipsis; }
 .account-count { min-width: 25px; padding: 3px 8px; border-radius: 99px; background: #593f46; color: white; font-size: 12px; text-align: center; }
+.empty-account-state { display: grid; align-content: center; justify-items: center; min-height: 0; padding: 14px 12px; text-align: center; }
+.empty-account-state h2 { margin: 0; font-size: 16px; }
+.empty-account-state p { max-width: 280px; margin: 8px 0 16px; color: #795f66; font-size: 12px; line-height: 1.45; }
+.empty-account-action { min-height: 44px; padding: 0 16px; border: 0; border-radius: 12px; color: var(--empty-action-text); background: var(--empty-action-background); cursor: pointer; font-size: 13px; font-weight: 700; }
 .app-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 18px; }
 .app-footer button { border: 0; color: #795f66; background: transparent; cursor: pointer; font-size: 12px; }
 .app-footer button:disabled { cursor: wait; opacity: .62; }
@@ -59,6 +71,8 @@ h1[tabindex="-1"]:focus { outline: none; }
     --dark-secondary-text: #c5b4b7;
     --dark-disabled-text: #a89498;
     --focus-ring: var(--dark-secondary-text);
+    --empty-action-background: #e4b983;
+    --empty-action-text: #302329;
     color: #f4e9df;
     background: var(--dark-surface);
   }
@@ -73,7 +87,8 @@ h1[tabindex="-1"]:focus { outline: none; }
   .provider-state,
   .add-account-status,
   .retry-button,
-  .settings-copy p { color: var(--dark-secondary-text); }
+  .settings-copy p,
+  .empty-account-state p { color: var(--dark-secondary-text); }
   .provider-button:disabled { color: var(--dark-disabled-text); opacity: 1; }
   .provider-button:disabled .provider-state { color: var(--dark-disabled-text); }
 }

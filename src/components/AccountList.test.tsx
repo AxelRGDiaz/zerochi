@@ -1,6 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { mockAccounts } from "../stores/mockState";
 import type { MailAccount } from "../types/mail";
 import { AccountList } from "./AccountList";
 
@@ -35,11 +34,12 @@ describe("AccountList", () => {
     expect(markup).toContain("account-0@example.com");
   });
 
-  it("renders every account in the current mock state", () => {
-    const markup = renderAccounts(mockAccounts);
+  it("renders every account in a representative three-account input", () => {
+    const representativeAccounts = accounts(3);
+    const markup = renderAccounts(representativeAccounts);
 
-    expect(markup.match(/<button/g)).toHaveLength(mockAccounts.length);
-    mockAccounts.forEach(({ email }) => expect(markup).toContain(email));
+    expect(markup.match(/<button/g)).toHaveLength(representativeAccounts.length);
+    representativeAccounts.forEach(({ email }) => expect(markup).toContain(email));
   });
 
   it("keeps every account represented and keyboard-operable in a large list", () => {

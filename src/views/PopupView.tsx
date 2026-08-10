@@ -1,6 +1,7 @@
 import type { MailAccount } from "../types/mail";
 import type { PetPresentation } from "../pet/PetState";
 import { AccountList } from "../components/AccountList";
+import { EmptyAccountState } from "../components/EmptyAccountState";
 import { PopupActions } from "../components/PopupActions";
 import { PopupSummary } from "../components/PopupSummary";
 import { ViewHeading } from "../components/ViewHeading";
@@ -32,8 +33,14 @@ export function PopupView({
         <ViewHeading>ZEROCHI</ViewHeading>
       </header>
       <PetRenderer presentation={presentation} visible={isActive} />
-      <PopupSummary message={presentation.message} pendingTotal={pendingTotal} />
-      <AccountList accounts={accounts} />
+      {accounts.length === 0 ? (
+        <EmptyAccountState onOpenAddAccount={onOpenAddAccount} />
+      ) : (
+        <>
+          <PopupSummary message={presentation.message} pendingTotal={pendingTotal} />
+          <AccountList accounts={accounts} />
+        </>
+      )}
       <PopupActions onOpenAddAccount={onOpenAddAccount} onOpenSettings={onOpenSettings} />
     </main>
   );

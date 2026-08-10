@@ -82,6 +82,10 @@ describe("dark theme contrast", () => {
   it("keeps primary provider and settings text compliant on the darkest raised surface", () => {
     expect(contrastRatio(darkPalette.primaryText, darkPalette.raisedSurface)).toBeGreaterThanOrEqual(4.5);
   });
+
+  it("keeps the empty-state action text compliant", () => {
+    expect(contrastRatio(darkPalette.emptyActionText, darkPalette.emptyActionBackground)).toBeGreaterThanOrEqual(4.5);
+  });
 });
 
 describe("light theme active provider contrast", () => {
@@ -108,5 +112,9 @@ describe("light theme active provider contrast", () => {
     const ratio = contrastRatio(lightPalette.activeProviderState, background);
     expect(ratio).toBeCloseTo(expectedRatio, 3);
     expect(ratio).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("keeps the empty-state action text compliant", () => {
+    expect(contrastRatio(lightPalette.emptyActionText, lightPalette.emptyActionBackground)).toBeGreaterThanOrEqual(4.5);
   });
 });

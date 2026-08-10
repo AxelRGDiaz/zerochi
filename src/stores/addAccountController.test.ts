@@ -32,6 +32,15 @@ function commandError(
 }
 
 describe("add account controller", () => {
+  it("starts with no accounts when production provides no persisted snapshot", () => {
+    const controller = createAddAccountController(vi.fn<AddAccountPort>());
+
+    expect(controller.getSnapshot()).toEqual({
+      accounts: [],
+      addAccountState: { status: "idle" },
+    });
+  });
+
   it("invokes the injected zero-argument port once and prevents duplicate pending attempts", async () => {
     let resolveAttempt!: (result: AddAccountResult) => void;
     const port = vi.fn<AddAccountPort>(() => new Promise((resolve) => {
