@@ -41,6 +41,41 @@ function executeJson(commandArgs) {
   }
 }
 
+function wait(milliseconds) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+}
+
+function startAgentWhenShellIsReady(agent, paneId) {
+  const commandArgs = [
+    "agent", "start", agent.name, "--kind", "codex", "--pane", paneId,
+    "--timeout", "120000", "--", "--sandbox", "workspace-write", "--ask-for-approval", "on-request",
+  ];
+  const deadline = Date.now() + 20_000;
+  let attempts = 0;
+
+  while (true) {
+    attempts += 1;
+    const result = execute("herdr", commandArgs, { allowFailure: true });
+    if (result.status === 0) {
+      try {
+        return JSON.parse(result.stdout);
+      } catch {
+        fail(`Herdr inició ${agent.name}, pero no devolvió JSON válido`);
+      }
+    }
+
+    const output = `${result.stderr ?? ""}\n${result.stdout ?? ""}`;
+    const shellIsStarting = output.includes('"code":"agent_pane_busy"');
+    if (!shellIsStarting || Date.now() >= deadline) {
+      const detail = result.stderr?.trim() || result.stdout?.trim() || `exit ${result.status}`;
+      fail(`herdr ${commandArgs.join(" ")} falló después de ${attempts} intento(s): ${detail}`);
+    }
+
+    if (attempts === 1) process.stdout.write(`… esperando que el shell de ${agent.workspace} quede disponible\n`);
+    wait(500);
+  }
+}
+
 function snapshot() {
   return executeJson(["api", "snapshot"]).result.snapshot;
 }
@@ -147,10 +182,7 @@ for (const agent of definition.agents) {
   if (!pane) fail(`${agent.workspace} no tiene un pane de shell disponible`);
 
   process.stdout.write(`▶ iniciando ${agent.name}\n`);
-  executeJson([
-    "agent", "start", agent.name, "--kind", "codex", "--pane", pane.pane_id,
-    "--timeout", "120000", "--", "--sandbox", "workspace-write", "--ask-for-approval", "on-request",
-  ]);
+  startAgentWhenShellIsReady(agent, pane.pane_id);
   executeJson(["agent", "prompt", agent.name, onboardingPrompt(agent)]);
 }
 

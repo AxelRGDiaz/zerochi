@@ -52,6 +52,10 @@ npm run herdr
 
 The bootstrap never commits, stashes, deletes, resets, or overwrites user changes. It stops if the main checkout is dirty.
 
+## Troubleshooting
+
+New Herdr workspaces can report `agent_pane_busy` for a fraction of a second while their login shell initializes. The bootstrap treats only that exact error as transient and retries every 500 ms for up to 20 seconds. Other start errors fail immediately. Re-running `npm run herdr` is safe: existing workspaces and named live agents are reused.
+
 ## Installation and lifecycle
 
 ```bash
