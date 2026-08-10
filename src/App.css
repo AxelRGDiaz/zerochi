@@ -1,4 +1,5 @@
 :root {
+  --light-active-provider-state: #795f66;
   color: #3a2d35;
   background: #f4eee6;
   font-family: ui-rounded, "SF Pro Rounded", "SF Pro Display", system-ui, sans-serif;
@@ -12,6 +13,7 @@ button { font: inherit; }
 .app-header { text-align: center; }
 .eyebrow { margin: 0; color: #9b746a; font-size: 10px; font-weight: 800; letter-spacing: .2em; }
 h1 { margin: 5px 0 22px; font-size: 24px; letter-spacing: .12em; }
+h1:focus { outline: 2px solid #9b746a; outline-offset: 4px; }
 .pet-stage { display: grid; place-items: center; height: 154px; text-align: center; }
 .pet-placeholder { display: grid; place-items: center; width: 112px; height: 112px; border: 3px solid #593f46; border-radius: 28px 28px 40px 40px; color: #593f46; background: #eecb9d; box-shadow: 0 8px 0 #d8aa78; font: 700 29px/1 monospace; image-rendering: pixelated; }
 .pet-mood { margin: 12px 0 0; color: #9b746a; font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
@@ -25,12 +27,47 @@ h1 { margin: 5px 0 22px; font-size: 24px; letter-spacing: .12em; }
 .account-name { display: grid; gap: 2px; font-size: 14px; font-weight: 700; }
 .account-name small { overflow: hidden; color: #927d80; font-size: 10px; font-weight: 500; text-overflow: ellipsis; }
 .account-count { min-width: 25px; padding: 3px 8px; border-radius: 99px; background: #593f46; color: white; font-size: 12px; text-align: center; }
-.app-footer { display: flex; justify-content: space-between; margin-top: 18px; }
+.app-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 18px; }
 .app-footer button { border: 0; color: #795f66; background: transparent; cursor: pointer; font-size: 12px; }
+.app-footer button:disabled { cursor: wait; opacity: .62; }
+.settings-button { display: grid; place-items: center; padding: 0; }
+.settings-icon { line-height: 1; }
+.subview-header { display: grid; grid-template-columns: 68px 1fr 68px; align-items: center; }
+.subview-header h1 { margin: 0; text-align: center; }
+.back-button { justify-self: start; min-height: 44px; border: 0; color: #795f66; background: transparent; cursor: pointer; font-size: 13px; }
+.subview-intro { margin: 28px 0 18px; color: #795f66; font-size: 13px; line-height: 1.45; }
+.provider-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.provider-button { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 54px; padding: 12px 14px; border: 1px solid #e0d3c5; border-radius: 14px; color: inherit; background: rgba(255, 252, 247, .72); cursor: pointer; font-weight: 700; }
+.provider-button:disabled { cursor: not-allowed; opacity: .58; }
+.provider-state { color: var(--light-active-provider-state); font-size: 11px; font-weight: 600; }
+.add-account-status { margin: 14px 0 0; color: #795f66; font-size: 12px; line-height: 1.4; }
+.retry-button { min-height: 44px; margin-top: 8px; border: 0; color: #795f66; background: transparent; cursor: pointer; font-size: 12px; font-weight: 700; }
+.settings-copy { display: grid; gap: 14px; margin-top: 28px; }
+.settings-copy section { padding: 14px; border: 1px solid #e0d3c5; border-radius: 14px; background: rgba(255, 252, 247, .72); }
+.settings-copy h2 { margin: 0 0 6px; font-size: 14px; }
+.settings-copy p { margin: 0; color: #795f66; font-size: 12px; line-height: 1.45; }
 @media (prefers-color-scheme: dark) {
-  :root { color: #f4e9df; background: #211b20; }
-  .app-shell { background: radial-gradient(circle at 50% 20%, #392d30 0 22%, transparent 48%), #211b20; }
+  :root {
+    --dark-surface: #211b20;
+    --dark-raised-surface: #392d30;
+    --dark-secondary-text: #c5b4b7;
+    --dark-disabled-text: #a89498;
+    color: #f4e9df;
+    background: var(--dark-surface);
+  }
+  .app-shell { background: radial-gradient(circle at 50% 20%, var(--dark-raised-surface) 0 22%, transparent 48%), var(--dark-surface); }
   .account-row { border-color: #4b3d40; background: rgba(57, 45, 48, .8); }
   .account-row:hover { background: #453538; }
   .account-count { background: #e4b983; color: #302329; }
+  .provider-button, .settings-copy section { border-color: #4b3d40; background: rgba(57, 45, 48, .8); }
+  .app-footer button,
+  .back-button,
+  .subview-intro,
+  .provider-state,
+  .add-account-status,
+  .retry-button,
+  .settings-copy p { color: var(--dark-secondary-text); }
+  .provider-button:disabled { color: var(--dark-disabled-text); opacity: 1; }
+  .provider-button:disabled .provider-state { color: var(--dark-disabled-text); }
+  h1:focus { outline-color: var(--dark-secondary-text); }
 }
