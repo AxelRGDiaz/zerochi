@@ -1,5 +1,6 @@
 :root {
   --light-active-provider-state: #795f66;
+  --focus-ring: #795f66;
   color: #3a2d35;
   background: #f4eee6;
   font-family: ui-rounded, "SF Pro Rounded", "SF Pro Display", system-ui, sans-serif;
@@ -8,13 +9,14 @@
 }
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; min-height: 100vh; -webkit-user-select: none; user-select: none; }
-:where(input, textarea, [contenteditable="true"]) { -webkit-user-select: text; user-select: text; }
+:where(input, textarea, [contenteditable]:not([contenteditable="false"])) { -webkit-user-select: text; user-select: text; }
 button { font: inherit; }
+:where(button, a[href], input, select, textarea, [contenteditable]:not([contenteditable="false"]), [tabindex]:not([tabindex="-1"])):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .app-shell { width: min(100%, 390px); min-height: 100vh; margin: 0 auto; padding: 28px 24px; background: radial-gradient(circle at 50% 20%, #fffaf2 0 22%, transparent 48%), #f4eee6; }
 .app-header { text-align: center; }
 .eyebrow { margin: 0; color: #9b746a; font-size: 10px; font-weight: 800; letter-spacing: .2em; }
 h1 { margin: 5px 0 22px; font-size: 24px; letter-spacing: .12em; }
-h1:focus { outline: none; }
+h1[tabindex="-1"]:focus { outline: none; }
 .pet-stage { display: grid; place-items: center; height: 154px; text-align: center; }
 .pet-placeholder { display: grid; place-items: center; width: 112px; height: 112px; border: 3px solid #593f46; border-radius: 28px 28px 40px 40px; color: #593f46; background: #eecb9d; box-shadow: 0 8px 0 #d8aa78; font: 700 29px/1 monospace; image-rendering: pixelated; }
 .pet-mood { margin: 12px 0 0; color: #9b746a; font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
@@ -31,6 +33,7 @@ h1:focus { outline: none; }
 .app-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 22px; padding-bottom: 6px; }
 .app-footer button { border: 0; color: #795f66; background: transparent; cursor: pointer; font-size: 12px; }
 .app-footer button:disabled { cursor: wait; opacity: .62; }
+.add-account-button { padding: 0 4px; }
 .settings-button { display: grid; place-items: center; padding: 0; }
 .settings-icon { line-height: 1; }
 .subview-header { display: grid; grid-template-columns: 68px 1fr 68px; align-items: center; }
@@ -53,6 +56,7 @@ h1:focus { outline: none; }
     --dark-raised-surface: #392d30;
     --dark-secondary-text: #c5b4b7;
     --dark-disabled-text: #a89498;
+    --focus-ring: var(--dark-secondary-text);
     color: #f4e9df;
     background: var(--dark-surface);
   }
