@@ -73,7 +73,9 @@ Then one command creates or reuses all six agents, sends each role prompt, and o
 npm run herdr
 ```
 
-Agents perform onboarding and answer `READY`; they do not start implementation until the Lead assigns work. The command is idempotent and does not duplicate live named agents. Preview it without changing Herdr or Git with `npm run herdr:dry-run`; initialize without opening the TUI with `npm run herdr:setup`.
+The board opens all six agents together in a persistent 2×3 grid and focuses `zerochi-lead`: Lead/Gmail on the first row, Tauri/UI on the second, and Pet/QA on the third. Use `ctrl+b z` to zoom the focused pane and repeat it to return to the grid.
+
+Specialists perform onboarding and answer `READY`; they start only after Lead assigns one bounded task. On a new Lead session, Lead inspects the project coordination state and dispatches the next safe parallel wave automatically. Reattaching an existing live board does not resend work, so the command remains idempotent and does not duplicate assignments or agents. Preview it without changing Herdr or Git with `npm run herdr:dry-run`; initialize without opening the TUI with `npm run herdr:setup`.
 
 Herdr keeps its session and panes alive when the terminal client detaches. The optional Codex session-resume integration can be installed once with `herdr integration install codex`. Full lifecycle, recovery, branch, and prompt details are documented in `.agent/HERDR.md`.
 

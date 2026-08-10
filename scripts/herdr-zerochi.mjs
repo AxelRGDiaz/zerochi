@@ -101,11 +101,14 @@ function validateDefinition(definition) {
   }
 }
 
-function ensureRepositoryReady() {
+function ensureRepositoryHasCommit() {
   const head = execute("git", ["rev-parse", "--verify", "HEAD"], { allowFailure: true });
   if (head.status !== 0) {
     fail("el repositorio aún no tiene commit inicial; crea un commit verde antes de generar worktrees");
   }
+}
+
+function ensureRepositoryClean() {
   const status = execute("git", ["status", "--porcelain"]);
   if (status.stdout.trim()) {
     fail("el worktree principal tiene cambios; haz commit o guárdalos antes de iniciar los agentes");
@@ -119,6 +122,79 @@ function findWorkspace(current, label) {
 function findAvailablePane(current, workspaceId) {
   const agentsByPane = new Set(current.agents.map((agent) => agent.pane_id));
   return current.panes.find((pane) => pane.workspace_id === workspaceId && !agentsByPane.has(pane.pane_id));
+}
+
+function checkoutPathsByBranch() {
+  const result = execute("git", ["worktree", "list", "--porcelain"]);
+  const paths = new Map();
+  for (const block of result.stdout.trim().split(/\n\n+/)) {
+    const worktree = block.match(/^worktree (.+)$/m)?.[1];
+    const branch = block.match(/^branch refs\/heads\/(.+)$/m)?.[1];
+    if (worktree && branch) paths.set(branch, worktree);
+  }
+  return paths;
+}
+
+function expectedCheckout(agent, branchPaths) {
+  return agent.checkout === "main" ? projectRoot : branchPaths.get(agent.branch);
+}
+
+function recoverAgentName(agent, current, branchPaths) {
+  if (current.agents.some((candidate) => candidate.name === agent.name)) return false;
+
+  const checkout = expectedCheckout(agent, branchPaths);
+  if (!checkout) return false;
+  const candidates = current.agents.filter((candidate) => {
+    if (candidate.name) return false;
+    return candidate.cwd === checkout || candidate.foreground_cwd === checkout;
+  });
+  if (candidates.length !== 1) return false;
+
+  process.stdout.write(`↻ restaurando nombre ${agent.name} en ${candidates[0].pane_id}\n`);
+  executeJson(["agent", "rename", candidates[0].pane_id, agent.name]);
+  return true;
+}
+
+function requireLiveAgent(current, name) {
+  const agent = current.agents.find((candidate) => candidate.name === name);
+  if (!agent) fail(`el agente ${name} no está activo para construir la vista`);
+  return agent;
+}
+
+function ensureBoardLayout(definition) {
+  const leadName = "zerochi-lead";
+  const placements = [
+    { name: "zerochi-gmail", target: leadName, split: "right", ratio: "0.5" },
+    { name: "zerochi-tauri", target: leadName, split: "down", ratio: "0.333" },
+    { name: "zerochi-pet", target: "zerochi-tauri", split: "down", ratio: "0.5" },
+    { name: "zerochi-ui", target: "zerochi-gmail", split: "down", ratio: "0.333" },
+    { name: "zerochi-qa", target: "zerochi-ui", split: "down", ratio: "0.5" },
+  ];
+
+  for (const placement of placements) {
+    const current = snapshot();
+    const lead = requireLiveAgent(current, leadName);
+    const source = requireLiveAgent(current, placement.name);
+    const target = requireLiveAgent(current, placement.target);
+    if (source.tab_id === lead.tab_id) continue;
+
+    process.stdout.write(`▦ moviendo ${placement.name} a la vista 2×3\n`);
+    executeJson([
+      "pane", "move", source.pane_id,
+      "--tab", lead.tab_id,
+      "--split", placement.split,
+      "--target-pane", target.pane_id,
+      "--ratio", placement.ratio,
+      "--no-focus",
+    ]);
+  }
+
+  const arranged = snapshot();
+  for (const agent of definition.agents) {
+    const live = requireLiveAgent(arranged, agent.name);
+    executeJson(["pane", "rename", live.pane_id, agent.name]);
+  }
+  executeJson(["agent", "focus", leadName]);
 }
 
 function createWorkspace(agent, definition) {
@@ -141,7 +217,11 @@ function createWorkspace(agent, definition) {
 
 function onboardingPrompt(agent) {
   const rolePrompt = readFileSync(join(projectRoot, agent.prompt), "utf8").trim();
-  return `${rolePrompt}\n\nHERDR ONBOARDING\nYour Herdr name is ${agent.name} and your Zerochi role is ${agent.role}. Read every required coordination document now. Do not edit files, start a milestone, create commits, or assign yourself work during onboarding. When ready, reply exactly: READY ${agent.name} — awaiting Lead assignment.`;
+  const identity = `Your Herdr name is ${agent.name} and your Zerochi role is ${agent.role}. Read every required coordination document now.`;
+  if (agent.role === "lead") {
+    return `${rolePrompt}\n\nHERDR LEAD STARTUP\n${identity} Inspect the current Git/worktree state plus TASKS.md and STATUS.md. When the baseline and contracts permit it, mark the next bounded parallel wave active and dispatch exactly one ownership-safe task to each needed specialist with \`herdr agent prompt <name> <prompt>\`. Do not duplicate assignments already active or completed, and do not implement specialist work yourself. Keep coordinating blockers, reviews, and integration until the active wave is accounted for.`;
+  }
+  return `${rolePrompt}\n\nHERDR SPECIALIST ONBOARDING\n${identity} Do not edit files, start a milestone, create commits, or assign yourself work during onboarding. Reply exactly: READY ${agent.name} — awaiting Lead assignment, then wait. When Lead assigns one bounded task, implement and test only that task in your worktree, report files/checks/risks/integration needs, and commit the green result on your configured branch.`;
 }
 
 const definition = JSON.parse(readFileSync(definitionPath, "utf8"));
@@ -158,10 +238,20 @@ if (dryRun) {
 
 execute("herdr", ["--version"]);
 execute("codex", ["--version"]);
-ensureRepositoryReady();
+ensureRepositoryHasCommit();
+const branchPaths = checkoutPathsByBranch();
+
+let initial = snapshot();
+for (const agent of definition.agents) recoverAgentName(agent, initial, branchPaths);
+initial = snapshot();
+if (!definition.agents.every((agent) => initial.agents.some((candidate) => candidate.name === agent.name))) {
+  ensureRepositoryClean();
+}
 
 for (const agent of definition.agents) {
   let current = snapshot();
+  recoverAgentName(agent, current, branchPaths);
+  current = snapshot();
   const live = current.agents.find((candidate) => candidate.name === agent.name);
   if (live) {
     process.stdout.write(`✓ ${agent.name} ya está activo (${live.agent_status})\n`);
@@ -186,5 +276,6 @@ for (const agent of definition.agents) {
   executeJson(["agent", "prompt", agent.name, onboardingPrompt(agent)]);
 }
 
-process.stdout.write("\n✓ Los seis agentes de Zerochi están iniciados y recibieron onboarding.\n");
+ensureBoardLayout(definition);
+process.stdout.write("\n✓ Los seis agentes de Zerochi están iniciados en una vista 2×3 con Lead enfocado.\n");
 if (!setupOnly) execute("herdr", [], { inherit: true });
