@@ -48,6 +48,7 @@ impl CallbackPort for LoopbackCallbackPort {
 
         Ok(Box::new(LoopbackCallbackSession {
             redirect_uri: format!("http://127.0.0.1:{}{CALLBACK_PATH}", address.port()),
+            authority: format!("127.0.0.1:{}", address.port()),
             listener: Some(listener),
             timeout: self.timeout,
         }))
@@ -56,6 +57,7 @@ impl CallbackPort for LoopbackCallbackPort {
 
 struct LoopbackCallbackSession {
     redirect_uri: String,
+    authority: String,
     listener: Option<TcpListener>,
     timeout: Duration,
 }
@@ -72,12 +74,19 @@ impl CallbackSession for LoopbackCallbackSession {
     ) -> PortFuture<'a, Result<AuthorizationCallback, AddAccountError>> {
         let listener = self.listener.take();
         let expected_state = SensitiveString::new(expected_state.to_owned());
+        let expected_authority = self.authority.clone();
         let cancellation = cancellation.clone();
         let timeout = self.timeout;
         Box::pin(async move {
             let listener = listener.ok_or_else(callback_invalid)?;
             tauri::async_runtime::spawn_blocking(move || {
-                receive_blocking(listener, expected_state, cancellation, timeout)
+                receive_blocking(
+                    listener,
+                    expected_state,
+                    expected_authority,
+                    cancellation,
+                    timeout,
+                )
             })
             .await
             .map_err(|_| internal())?
@@ -88,6 +97,7 @@ impl CallbackSession for LoopbackCallbackSession {
 fn receive_blocking(
     listener: TcpListener,
     expected_state: SensitiveString,
+    expected_authority: String,
     cancellation: Cancellation,
     timeout: Duration,
 ) -> Result<AuthorizationCallback, AddAccountError> {
@@ -103,7 +113,13 @@ fn receive_blocking(
                 if !peer.ip().is_loopback() {
                     return Err(callback_invalid());
                 }
-                let result = read_callback(&mut stream, &expected_state, &cancellation, deadline);
+                let result = read_callback(
+                    &mut stream,
+                    &expected_state,
+                    &expected_authority,
+                    &cancellation,
+                    deadline,
+                );
                 write_static_html(&mut stream);
                 return result;
             }
@@ -118,6 +134,7 @@ fn receive_blocking(
 fn read_callback(
     stream: &mut TcpStream,
     expected_state: &SensitiveString,
+    expected_authority: &str,
     cancellation: &Cancellation,
     deadline: Instant,
 ) -> Result<AuthorizationCallback, AddAccountError> {
@@ -141,7 +158,11 @@ fn read_callback(
             Ok(count) => {
                 used += count;
                 if let Some(header_end) = find_header_end(&buffer[..used]) {
-                    return parse_request(&buffer[..header_end], expected_state);
+                    return parse_request(
+                        &buffer[..header_end],
+                        expected_state,
+                        expected_authority,
+                    );
                 }
             }
             Err(error) if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {}
@@ -160,6 +181,7 @@ fn find_header_end(bytes: &[u8]) -> Option<usize> {
 fn parse_request(
     request: &[u8],
     expected_state: &SensitiveString,
+    expected_authority: &str,
 ) -> Result<AuthorizationCallback, AddAccountError> {
     if request.len() > MAX_REQUEST_BYTES {
         return Err(callback_invalid());
@@ -176,6 +198,10 @@ fn parse_request(
     if parts.next().is_some() || method != b"GET" || !matches!(version, b"HTTP/1.1" | b"HTTP/1.0") {
         return Err(callback_invalid());
     }
+    if !target.starts_with(b"/") || target.starts_with(b"//") {
+        return Err(callback_invalid());
+    }
+    validate_host_header(request, first_line_end + 2, expected_authority)?;
 
     let (path, query) = split_at_byte(target, b'?').ok_or_else(callback_invalid)?;
     if path != CALLBACK_PATH.as_bytes() || query.is_empty() {
@@ -216,6 +242,93 @@ fn parse_request(
         .filter(|code| !code.is_empty())
         .ok_or_else(callback_invalid)?;
     Ok(AuthorizationCallback { code })
+}
+
+fn validate_host_header(
+    request: &[u8],
+    mut cursor: usize,
+    expected_authority: &str,
+) -> Result<(), AddAccountError> {
+    let mut host_seen = false;
+    loop {
+        let relative_end = request[cursor..]
+            .windows(2)
+            .position(|window| window == b"\r\n")
+            .ok_or_else(callback_invalid)?;
+        let line_end = cursor + relative_end;
+        let line = &request[cursor..line_end];
+        cursor = line_end + 2;
+        if line.is_empty() {
+            if cursor != request.len() {
+                return Err(callback_invalid());
+            }
+            break;
+        }
+        if line.first().is_some_and(u8::is_ascii_whitespace) {
+            return Err(callback_invalid());
+        }
+        let (name, raw_value) = split_at_byte(line, b':').ok_or_else(callback_invalid)?;
+        if name.is_empty() || !name.iter().all(|byte| is_header_name_byte(*byte)) {
+            return Err(callback_invalid());
+        }
+        if !raw_value
+            .iter()
+            .all(|byte| *byte == b'\t' || (*byte >= b' ' && *byte <= b'~'))
+        {
+            return Err(callback_invalid());
+        }
+        if name.eq_ignore_ascii_case(b"host") {
+            if host_seen {
+                return Err(callback_invalid());
+            }
+            host_seen = true;
+            let value = trim_optional_whitespace(raw_value);
+            if value != expected_authority.as_bytes() {
+                return Err(callback_invalid());
+            }
+        }
+    }
+    if !host_seen {
+        return Err(callback_invalid());
+    }
+    Ok(())
+}
+
+fn is_header_name_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric()
+        || matches!(
+            byte,
+            b'!' | b'#'
+                | b'$'
+                | b'%'
+                | b'&'
+                | b'\''
+                | b'*'
+                | b'+'
+                | b'-'
+                | b'.'
+                | b'^'
+                | b'_'
+                | b'`'
+                | b'|'
+                | b'~'
+        )
+}
+
+fn trim_optional_whitespace(mut value: &[u8]) -> &[u8] {
+    while value
+        .first()
+        .is_some_and(|byte| matches!(byte, b' ' | b'\t'))
+    {
+        value = &value[1..];
+    }
+    while value
+        .last()
+        .is_some_and(|byte| matches!(byte, b' ' | b'\t'))
+    {
+        value = &value[..value.len() - 1];
+    }
+    value
 }
 
 fn split_at_byte(bytes: &[u8], needle: u8) -> Option<(&[u8], &[u8])> {
@@ -305,10 +418,15 @@ mod tests {
     use crate::auth::AddAccountAttemptGuardSet;
 
     const STATE: &str = "fixture-state-0123456789";
+    const AUTHORITY: &str = "127.0.0.1:49152";
 
     fn parse(target: &str) -> Result<AuthorizationCallback, AddAccountError> {
-        let request = format!("GET {target} HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n");
-        parse_request(request.as_bytes(), &SensitiveString::new(STATE.into()))
+        let request = format!("GET {target} HTTP/1.1\r\nHost: {AUTHORITY}\r\n\r\n");
+        parse_request(
+            request.as_bytes(),
+            &SensitiveString::new(STATE.into()),
+            AUTHORITY,
+        )
     }
 
     #[test]
@@ -335,10 +453,53 @@ mod tests {
         ];
 
         for request in invalid {
-            let error =
-                parse_request(request.as_bytes(), &SensitiveString::new(STATE.into())).unwrap_err();
+            let error = parse_request(
+                request.as_bytes(),
+                &SensitiveString::new(STATE.into()),
+                AUTHORITY,
+            )
+            .unwrap_err();
             assert_eq!(error.tag(), AddAccountErrorTag::CallbackInvalid);
         }
+    }
+
+    #[test]
+    fn rejects_missing_wrong_duplicate_or_malformed_host_and_absolute_targets() {
+        let target = format!("{CALLBACK_PATH}?code=x&state={STATE}");
+        let invalid = [
+            format!("GET {target} HTTP/1.1\r\nAccept: */*\r\n\r\n"),
+            format!("GET {target} HTTP/1.1\r\nHost: 127.0.0.1:1\r\n\r\n"),
+            format!("GET {target} HTTP/1.1\r\nHost: {AUTHORITY}\r\nhOsT: {AUTHORITY}\r\n\r\n"),
+            format!("GET {target} HTTP/1.1\r\nHost : {AUTHORITY}\r\n\r\n"),
+            format!("GET {target} HTTP/1.1\r\nHost: {AUTHORITY},evil.test\r\n\r\n"),
+            format!("GET {target} HTTP/1.1\r\nHost: {AUTHORITY}\r\n folded\r\n\r\n"),
+            format!("GET http://{AUTHORITY}{target} HTTP/1.1\r\nHost: {AUTHORITY}\r\n\r\n"),
+            format!("GET //{AUTHORITY}{target} HTTP/1.1\r\nHost: {AUTHORITY}\r\n\r\n"),
+        ];
+
+        for request in invalid {
+            let error = parse_request(
+                request.as_bytes(),
+                &SensitiveString::new(STATE.into()),
+                AUTHORITY,
+            )
+            .unwrap_err();
+            assert_eq!(error.tag(), AddAccountErrorTag::CallbackInvalid);
+        }
+    }
+
+    #[test]
+    fn accepts_one_case_insensitive_host_header_with_optional_whitespace() {
+        let request = format!(
+            "GET {CALLBACK_PATH}?code=x&state={STATE} HTTP/1.1\r\nhOsT:\t{AUTHORITY} \r\nAccept: text/html\r\n\r\n"
+        );
+        let callback = parse_request(
+            request.as_bytes(),
+            &SensitiveString::new(STATE.into()),
+            AUTHORITY,
+        )
+        .expect("valid host");
+        assert_eq!(callback.code.expose(), "x");
     }
 
     #[test]
@@ -372,11 +533,12 @@ mod tests {
             .strip_suffix(CALLBACK_PATH)
             .expect("callback path")
             .to_owned();
+        let client_authority = address.clone();
         let client = std::thread::spawn(move || {
             let mut stream = TcpStream::connect(address).expect("connect callback");
             write!(
                 stream,
-                "GET {CALLBACK_PATH}?code=fixture-code&state={STATE} HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"
+                "GET {CALLBACK_PATH}?code=fixture-code&state={STATE} HTTP/1.1\r\nHost: {client_authority}\r\n\r\n"
             )
             .expect("send callback");
             let mut response = String::new();
@@ -423,8 +585,12 @@ mod tests {
         let mut request = format!("GET {CALLBACK_PATH}?code=");
         request.push_str(&"x".repeat(MAX_REQUEST_BYTES));
         request.push_str(&format!("&state={STATE} HTTP/1.1\r\n\r\n"));
-        let error =
-            parse_request(request.as_bytes(), &SensitiveString::new(STATE.into())).unwrap_err();
+        let error = parse_request(
+            request.as_bytes(),
+            &SensitiveString::new(STATE.into()),
+            AUTHORITY,
+        )
+        .unwrap_err();
         assert_eq!(error.tag(), AddAccountErrorTag::CallbackInvalid);
     }
 }
