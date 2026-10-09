@@ -155,15 +155,15 @@ cargo test --locked --manifest-path src-tauri/Cargo.toml --test m4_add_account_a
 
 Expected static output is empty except the tracked-filename scan may report only `.env.example`; any bundle match blocks integration and must be inspected without copying its contents into QA artifacts.
 
-## Gate G2 — Exact scopes, public-client request, and no client secret
+## Gate G2 — Exact scope, Desktop-client request, and no frontend secret exposure
 
 Pass conditions:
 
-- The authorization request’s scope set is exactly `openid`, `email`, `profile`, and `https://www.googleapis.com/auth/gmail.readonly`, with no duplicates or broader Gmail scope.
+- The authorization request’s scope set is exactly `https://www.googleapis.com/auth/gmail.readonly`, with no duplicates, OIDC scopes, or broader Gmail scope.
 - Authorization parameters contain the validated client ID, exact loopback redirect URI, `response_type=code`, `code_challenge_method=S256`, challenge, state, offline access, and the approved consent behavior.
 - The authorization URL excludes verifier, authorization code, token, and `client_secret`.
-- The token request contains code, verifier, client ID, exact redirect URI, and `grant_type=authorization_code`; it never contains `client_secret`.
-- Returned scopes are parsed as a set and fail closed if required scopes are missing or unexpected broader scopes are granted.
+- The token request contains code, verifier, client ID, its paired Desktop-client secret, exact redirect URI, and `grant_type=authorization_code`; none of those values crosses the Rust/Tauri boundary.
+- Returned scopes are parsed as a set and fail closed unless the set is exactly the one approved Gmail readonly scope.
 
 Command and required test names:
 
@@ -171,7 +171,7 @@ Command and required test names:
 cargo test --locked --manifest-path src-tauri/Cargo.toml --test m4_add_account_acceptance oauth_request_
 ```
 
-Required cases: `oauth_request_exact_scopes`, `oauth_request_uses_s256_and_offline_access`, `oauth_request_excludes_verifier_and_client_secret`, `token_request_excludes_client_secret`, and `token_response_rejects_scope_drift`.
+Required cases: `oauth_request_exact_scopes`, `oauth_request_uses_s256_and_offline_access`, `oauth_request_excludes_verifier_and_client_secret`, `token_request_uses_paired_desktop_client_credentials`, and `token_response_rejects_scope_drift`.
 
 ## Gate G3 — PKCE/state entropy and callback validation
 
@@ -343,7 +343,7 @@ Run on the exact candidate `.app` on a supported macOS version. Use dedicated te
 
 ### Browser cases
 
-Launch command for an unsigned development candidate with a local ignored `.env` containing only the approved client-ID variable:
+Launch command for an unsigned development candidate with a local ignored `.env` containing only the two approved paired Desktop-client OAuth variable names:
 
 ```sh
 npm run tauri dev
@@ -351,7 +351,7 @@ npm run tauri dev
 
 Manually verify:
 
-1. Personal Google approval shows only the four approved scopes, returns one account, and leaves no secret/config in the webview inspector or console.
+1. Personal Google approval shows only the approved Gmail readonly scope, returns one account, and leaves no secret/config in the webview inspector or console.
 2. Eligible Workspace approval succeeds without inferring policy from email suffix.
 3. Workspace admin/Gmail restriction returns only the fixed `workspace_restricted` presentation and leaves existing accounts untouched.
 4. User denial returns neutral `cancelled`; closing the browser and waiting returns bounded `timeout`; retry works after each.
@@ -412,7 +412,7 @@ Enabling or declaring M4 `add_account` accepted is blocked by any of the followi
 
 - Contract `0633269` absent, modified without Lead approval, or implemented with arguments, concurrent attempts, extra error fields/tags, or pre-commit success.
 - Any OAuth config, credential/token material, real user metadata, callback/provider detail, or synthetic canary reaches frontend source, bundle, command result, browser HTML, logs, fixtures, or plaintext persistence.
-- Any scope beyond the exact approved set; any `client_secret`; non-S256 PKCE; insufficient/linked entropy; non-loopback/fixed-port listener; state/callback validation failure.
+- Any scope beyond the exact approved set; any client credential reaching frontend/logs/plaintext persistence or not belonging to the same active Desktop client; non-S256 PKCE; insufficient/linked entropy; non-loopback/fixed-port listener; state/callback validation failure.
 - Missing, filtered-out, ignored-only, zero-count, flaky, or failing mandatory acceptance tests.
 - Keychain plaintext/mock fallback, incorrect backend selection, cross-account access, non-idempotent deletion, unredacted locked/denied failures, or unverified cleanup/zeroization.
 - Incorrect store/commit ordering, orphan secret/account after failure or cancellation, late commit after timeout, or mutation of another account.

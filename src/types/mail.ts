@@ -3,6 +3,7 @@ export interface MailAccount {
   email: string;
   displayName?: string;
   pendingCount: number;
+  inboxUnreadCount?: number;
   active: boolean;
   lastHistoryId?: string;
   lastSyncAt?: string;

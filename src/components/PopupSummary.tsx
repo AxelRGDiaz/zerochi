@@ -1,12 +1,19 @@
 interface PopupSummaryProps {
+  inboxUnreadTotal: number;
   message: string;
-  pendingTotal: number;
 }
 
-export function PopupSummary({ message, pendingTotal }: PopupSummaryProps) {
+export function PopupSummary({ inboxUnreadTotal, message }: PopupSummaryProps) {
+  const unreadCopy = inboxUnreadTotal === 1
+    ? "1 correo sin leer"
+    : `${inboxUnreadTotal} correos sin leer`;
+  const unreadLabel = inboxUnreadTotal === 1
+    ? "1 correo sin leer en total"
+    : `${inboxUnreadTotal} correos sin leer en total`;
+
   return (
     <section className="summary" aria-live="polite">
-      <strong>Tengo {pendingTotal} mails</strong>
+      <strong aria-label={unreadLabel}>{unreadCopy}</strong>
       <span>{message}</span>
     </section>
   );

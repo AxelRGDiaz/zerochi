@@ -3,10 +3,18 @@ import { describe, expect, it, vi } from "vitest";
 import type { MailAccount } from "../types/mail";
 import type { PetPresentation } from "../pet/PetState";
 import { createAddAccountController, type AddAccountPort } from "../stores/addAccountController";
+import { inboxUnreadTotal } from "../stores/mailCounters";
 import { PopupView } from "./PopupView";
 
 const accounts: MailAccount[] = [
-  { id: "personal", email: "personal@gmail.com", displayName: "Personal", pendingCount: 2, active: true },
+  {
+    id: "personal",
+    email: "personal@gmail.com",
+    displayName: "Personal",
+    pendingCount: 2,
+    inboxUnreadCount: 3,
+    active: true,
+  },
 ];
 
 const presentation: PetPresentation = {
@@ -22,14 +30,14 @@ const emptyPresentation: PetPresentation = {
 };
 
 function renderPopup(isActive: boolean, accountInput = accounts) {
-  const pendingTotal = accountInput.reduce((total, account) => total + account.pendingCount, 0);
   return renderToStaticMarkup(
     <PopupView
       accounts={accountInput}
+      inboxUnreadTotal={inboxUnreadTotal(accountInput)}
       isActive={isActive}
+      onOpenAccount={() => undefined}
       onOpenAddAccount={() => undefined}
       onOpenSettings={() => undefined}
-      pendingTotal={pendingTotal}
       presentation={accountInput.length === 0 ? emptyPresentation : presentation}
     />,
   );
@@ -45,6 +53,10 @@ describe("PopupView", () => {
     expect(markup).toContain('aria-label="Agregar cuenta"');
     expect(markup).toContain('aria-label="Abrir configuración"');
     expect(markup).not.toContain('class="account-list"');
+    expect(markup).not.toContain('class="summary"');
+    expect(markup).not.toContain('class="account-count"');
+    expect(markup).not.toContain("Tengo 0 mails");
+    expect(markup).not.toContain('aria-label="0 pendientes"');
     expect(markup).not.toContain("@");
   });
 
@@ -52,13 +64,25 @@ describe("PopupView", () => {
     const markup = renderPopup(true);
 
     expect(markup).toContain('<main class="app-shell home-popup">');
-    expect(markup).toContain("YOUR INBOX PET");
+    expect(markup).toContain("TU MASCOTA DE BANDEJA");
     expect(markup).toContain("ZEROCHI");
-    expect(markup).toContain("Tengo 2 mails");
+    expect(markup).toContain("3 correos sin leer");
+    expect(markup).toContain('aria-label="3 correos sin leer en total"');
     expect(markup).toContain("Te acompaño con calma.");
     expect(markup).toContain('aria-live="polite"');
     expect(markup).toContain('aria-label="Cuentas conectadas"');
-    expect(markup).toContain('aria-label="Zerochi está happy"');
+    expect(markup).toContain('aria-label="Zerochi está feliz"');
+  });
+
+  it.each([
+    [0, "0 correos sin leer", "0 correos sin leer en total"],
+    [1, "1 correo sin leer", "1 correo sin leer en total"],
+  ] as const)("renders normalized global copy for %i unread", (unread, copy, accessibleCopy) => {
+    const markup = renderPopup(true, [{ ...accounts[0], inboxUnreadCount: unread }]);
+
+    expect(markup).toContain(copy);
+    expect(markup).toContain(`aria-label="${unread} sin leer"`);
+    expect(markup).toContain(`aria-label="${accessibleCopy}"`);
   });
 
   it("does not render popup or animation content while inactive", () => {
@@ -70,9 +94,42 @@ describe("PopupView", () => {
 
     expect(markup.match(/<button/g)).toHaveLength(3);
     expect(markup.match(/type="button"/g)).toHaveLength(3);
-    expect(markup).toContain('aria-label="2 pendientes"');
+    expect(markup).toContain('aria-label="3 sin leer"');
     expect(markup).toContain('aria-label="Agregar cuenta"');
     expect(markup).toContain('aria-label="Abrir configuración"');
+  });
+
+  it("keeps the global unread total aligned with multiple account badges", () => {
+    const accountInput: MailAccount[] = [
+      { ...accounts[0], pendingCount: 9, inboxUnreadCount: 3 },
+      {
+        id: "work",
+        email: "work@example.com",
+        pendingCount: 0,
+        inboxUnreadCount: 4,
+        active: true,
+      },
+    ];
+    const markup = renderPopup(true, accountInput);
+
+    expect(markup).toContain("7 correos sin leer");
+    expect(markup).toContain('aria-label="3 sin leer"');
+    expect(markup).toContain('aria-label="4 sin leer"');
+    expect(markup).toContain("Te acompaño con calma.");
+    expect(markup).not.toContain("9 correos sin leer");
+  });
+
+  it("shows account 3 and global 3 when Zerochi pending is zero", () => {
+    const markup = renderPopup(true, [{
+      ...accounts[0],
+      pendingCount: 0,
+      inboxUnreadCount: 3,
+    }]);
+
+    expect(markup).toContain('aria-label="3 sin leer"');
+    expect(markup).toContain('aria-label="3 correos sin leer en total"');
+    expect(markup).toContain("3 correos sin leer");
+    expect(markup).not.toContain("0 correos sin leer");
   });
 
   it("replaces the empty state with the scrolling list and persistent footer after success", async () => {

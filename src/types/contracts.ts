@@ -21,9 +21,32 @@ export interface ExternalNavigationService {
   openMessage(message: Pick<MailMessage, "accountId" | "id" | "threadId">): Promise<void>;
 }
 
+export type OpenAccountErrorTag =
+  | "account_not_found"
+  | "internal"
+  | "navigation_failed";
+
+export type CheckMailNowErrorTag = "internal";
+
+export interface MailSyncService {
+  checkMailNow(): Promise<void>;
+}
+
 export interface AppSnapshot {
   accounts: MailAccount[];
   messages: MailMessage[];
+}
+
+export type SyncStatus = "healthy" | "retrying" | "action_required";
+
+export interface SyncStatusChanged {
+  accountId: AccountId;
+  status: SyncStatus;
+  retryAfterSeconds?: number;
+}
+
+export interface PopoverAnchorChanged {
+  x: number;
 }
 
 export type AddAccountErrorTag =
@@ -51,4 +74,13 @@ export interface CommandError<Tag extends string = string> {
 
 export interface AddAccountResult {
   account: MailAccount;
+}
+
+export type RemoveAccountErrorTag =
+  | "account_not_found"
+  | "internal"
+  | "secure_store_failed";
+
+export interface RemoveAccountResult {
+  snapshot: AppSnapshot;
 }

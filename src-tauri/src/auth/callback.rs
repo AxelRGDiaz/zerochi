@@ -2,6 +2,8 @@ use super::{
     AddAccountError, AddAccountErrorTag, AuthorizationCallback, CallbackPort, CallbackSession,
     Cancellation, PortFuture, SensitiveString,
 };
+use base64::{engine::general_purpose::STANDARD, Engine as _};
+use sha2::{Digest, Sha256};
 use std::{
     io::{ErrorKind, Read, Write},
     net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream},
@@ -12,8 +14,13 @@ use zeroize::{Zeroize, Zeroizing};
 const CALLBACK_PATH: &str = "/oauth/callback";
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(180);
 const MAX_REQUEST_BYTES: usize = 8 * 1024;
+const MAX_INVALID_REQUESTS: usize = 8;
 const IO_POLL: Duration = Duration::from_millis(25);
-const CALLBACK_HTML: &str = "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\"><title>Zerochi</title></head><body><p>You can return to Zerochi.</p></body></html>";
+const CALLBACK_CSS: &str = "*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:#f6f1e8;color:#332b27;font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif}.card{width:min(100%,520px);padding:40px 34px;border:2px solid #332b27;border-radius:28px;background:#fffdf8;box-shadow:8px 8px 0 #332b27;text-align:center}.pet{display:inline-grid;place-items:center;min-width:112px;height:82px;margin-bottom:22px;border:2px solid #332b27;border-radius:24px;background:#f7c873;font:700 26px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:2px}.eyebrow{margin:0 0 10px;color:#8f542f;font-size:13px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}h1{margin:0;font-size:clamp(28px,7vw,40px);line-height:1.08}p{margin:16px auto 0;max-width:38ch;font-size:17px;line-height:1.55}.hint{padding-top:18px;border-top:1px solid #ded5c8;color:#6d625b;font-size:14px}.error .pet{background:#f3b8a9}@media(prefers-color-scheme:dark){body{background:#211d1b;color:#f7efe4}.card{border-color:#f7efe4;background:#302a27;box-shadow:8px 8px 0 #0e0c0b}.pet{border-color:#f7efe4;color:#211d1b}.eyebrow{color:#f1b27d}.hint{border-color:#504742;color:#cfc2b7}}@media(max-width:420px){.card{padding:32px 22px;border-radius:22px;box-shadow:5px 5px 0 currentColor}}";
+
+const SUCCESS_BODY: &str = "<main class=\"card\"><div class=\"pet\" aria-hidden=\"true\">(•‿•)</div><p class=\"eyebrow\">Autorización recibida</p><h1>Zerochi está terminando</h1><p>Vuelve a la app mientras preparamos la conexión de forma segura.</p><p class=\"hint\">Ya puedes cerrar esta pestaña.</p></main>";
+const DENIED_BODY: &str = "<main class=\"card error\"><div class=\"pet\" aria-hidden=\"true\">(·_·)</div><p class=\"eyebrow\">Autorización no completada</p><h1>No pudimos continuar</h1><p>Vuelve a Zerochi para intentarlo otra vez o revisar el estado de la conexión.</p><p class=\"hint\">Puedes cerrar esta pestaña.</p></main>";
+const INVALID_BODY: &str = "<main class=\"card error\"><div class=\"pet\" aria-hidden=\"true\">(·_·)</div><p class=\"eyebrow\">Solicitud no válida</p><h1>Esta pestaña no pudo conectar</h1><p>Regresa a Zerochi y vuelve a iniciar la conexión.</p><p class=\"hint\">Puedes cerrar esta pestaña.</p></main>";
 
 pub(crate) struct LoopbackCallbackPort {
     timeout: Duration,
@@ -102,6 +109,7 @@ fn receive_blocking(
     timeout: Duration,
 ) -> Result<AuthorizationCallback, AddAccountError> {
     let deadline = Instant::now() + timeout;
+    let mut invalid_requests = 0;
     loop {
         cancellation.ensure_active()?;
         if Instant::now() >= deadline {
@@ -120,7 +128,15 @@ fn receive_blocking(
                     &cancellation,
                     deadline,
                 );
-                write_static_html(&mut stream);
+                write_callback_response(&mut stream, &result);
+                if result
+                    .as_ref()
+                    .is_err_and(|error| error.tag() == AddAccountErrorTag::CallbackInvalid)
+                    && invalid_requests + 1 < MAX_INVALID_REQUESTS
+                {
+                    invalid_requests += 1;
+                    continue;
+                }
                 return result;
             }
             Err(error) if error.kind() == ErrorKind::WouldBlock => {
@@ -395,13 +411,44 @@ fn classify_provider_error(error: &str) -> AddAccountError {
     AddAccountError::from_tag(tag)
 }
 
-fn write_static_html(stream: &mut TcpStream) {
-    let response = format!(
-        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nContent-Security-Policy: default-src 'none'; style-src 'none'; img-src 'none'\r\nReferrer-Policy: no-referrer\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n{CALLBACK_HTML}",
-        CALLBACK_HTML.len()
-    );
+fn write_callback_response(
+    stream: &mut TcpStream,
+    result: &Result<AuthorizationCallback, AddAccountError>,
+) {
+    let response = callback_response(result);
     let _ = stream.write_all(response.as_bytes());
     let _ = stream.flush();
+}
+
+fn callback_response(result: &Result<AuthorizationCallback, AddAccountError>) -> String {
+    let (status, page_class, body) = match result {
+        Ok(_) => ("200 OK", "success", SUCCESS_BODY),
+        Err(error)
+            if matches!(
+                error.tag(),
+                AddAccountErrorTag::Cancelled
+                    | AddAccountErrorTag::ProviderDenied
+                    | AddAccountErrorTag::WorkspaceRestricted
+            ) =>
+        {
+            ("403 Forbidden", "denied", DENIED_BODY)
+        }
+        Err(error) if error.tag() == AddAccountErrorTag::Timeout => {
+            ("408 Request Timeout", "invalid", INVALID_BODY)
+        }
+        Err(error) if error.tag() == AddAccountErrorTag::CallbackInvalid => {
+            ("400 Bad Request", "invalid", INVALID_BODY)
+        }
+        Err(_) => ("500 Internal Server Error", "invalid", INVALID_BODY),
+    };
+    let html = format!(
+        "<!doctype html><html lang=\"es\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"color-scheme\" content=\"light dark\"><title>Zerochi</title><style>{CALLBACK_CSS}</style></head><body class=\"{page_class}\">{body}</body></html>"
+    );
+    let style_hash = STANDARD.encode(Sha256::digest(CALLBACK_CSS.as_bytes()));
+    format!(
+        "HTTP/1.1 {status}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nContent-Security-Policy: default-src 'none'; style-src 'sha256-{style_hash}'; img-src 'none'; script-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'\r\nReferrer-Policy: no-referrer\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nCross-Origin-Opener-Policy: same-origin\r\nConnection: close\r\n\r\n{html}",
+        html.len()
+    )
 }
 
 fn callback_invalid() -> AddAccountError {
@@ -553,9 +600,167 @@ mod tests {
 
         assert_eq!(callback.code.expose(), "fixture-code");
         let response = client.join().expect("client thread");
-        assert!(response.contains(CALLBACK_HTML));
+        assert!(response.starts_with("HTTP/1.1 200 OK\r\n"));
+        assert!(response.contains("Autorización recibida"));
+        assert!(response.contains("Zerochi está terminando"));
+        assert!(response.contains("Ya puedes cerrar esta pestaña"));
         assert!(!response.contains("fixture-code"));
         assert!(!response.contains(STATE));
+    }
+
+    #[test]
+    fn callback_pages_use_safe_status_copy_headers_and_hashed_static_styles() {
+        let success = callback_response(&Ok(AuthorizationCallback {
+            code: SensitiveString::new("fixture-code".into()),
+        }));
+        let denied = callback_response(&Err(AddAccountError::from_tag(
+            AddAccountErrorTag::ProviderDenied,
+        )));
+        let invalid = callback_response(&Err(callback_invalid()));
+
+        assert!(success.starts_with("HTTP/1.1 200 OK\r\n"));
+        assert!(success.contains("<html lang=\"es\">"));
+        assert!(success.contains("Autorización recibida"));
+        assert!(success.contains("Zerochi está terminando"));
+        assert!(success.contains("Ya puedes cerrar esta pestaña"));
+        assert!(!success.contains("guardada"));
+
+        assert!(denied.starts_with("HTTP/1.1 403 Forbidden\r\n"));
+        assert!(denied.contains("Autorización no completada"));
+        assert!(!denied.contains("ProviderDenied"));
+        assert!(!denied.contains("fixture-code"));
+
+        assert!(invalid.starts_with("HTTP/1.1 400 Bad Request\r\n"));
+        assert!(invalid.contains("Solicitud no válida"));
+        assert!(!invalid.contains("Autorización recibida"));
+
+        for response in [&success, &denied, &invalid] {
+            let style_hash = STANDARD.encode(Sha256::digest(CALLBACK_CSS.as_bytes()));
+            assert!(response.contains(&format!("style-src 'sha256-{style_hash}'")));
+            assert!(response.contains("script-src 'none'"));
+            assert!(response.contains("Cache-Control: no-store"));
+            assert!(response.contains("X-Content-Type-Options: nosniff"));
+            assert!(!response.contains("<script"));
+            assert!(!response.contains("http://"));
+            assert!(!response.contains("https://"));
+        }
+    }
+
+    #[test]
+    fn invalid_request_does_not_consume_the_bounded_session() {
+        let port = LoopbackCallbackPort::with_timeout(Duration::from_secs(1));
+        let mut session = port.bind().expect("bind callback");
+        let address = session
+            .redirect_uri()
+            .strip_prefix("http://")
+            .expect("http redirect")
+            .strip_suffix(CALLBACK_PATH)
+            .expect("callback path")
+            .to_owned();
+        let client_authority = address.clone();
+        let client = std::thread::spawn(move || {
+            let mut invalid = TcpStream::connect(&address).expect("connect invalid request");
+            write!(
+                invalid,
+                "GET /favicon.ico HTTP/1.1\r\nHost: {client_authority}\r\n\r\n"
+            )
+            .expect("send invalid request");
+            let mut invalid_response = String::new();
+            invalid
+                .read_to_string(&mut invalid_response)
+                .expect("read invalid response");
+
+            let mut valid = TcpStream::connect(address).expect("connect valid callback");
+            write!(
+                valid,
+                "GET {CALLBACK_PATH}?code=after-invalid&state={STATE} HTTP/1.1\r\nHost: {client_authority}\r\n\r\n"
+            )
+            .expect("send valid callback");
+            let mut valid_response = String::new();
+            valid
+                .read_to_string(&mut valid_response)
+                .expect("read valid response");
+            (invalid_response, valid_response)
+        });
+        let attempts = AddAccountAttemptGuardSet::new();
+        let guard = attempts.begin().expect("attempt");
+        let callback =
+            tauri::async_runtime::block_on(session.receive(STATE, &guard.cancellation()))
+                .expect("valid callback after irrelevant request");
+        let (invalid_response, valid_response) = client.join().expect("client thread");
+
+        assert_eq!(callback.code.expose(), "after-invalid");
+        assert!(invalid_response.starts_with("HTTP/1.1 400 Bad Request\r\n"));
+        assert!(valid_response.starts_with("HTTP/1.1 200 OK\r\n"));
+    }
+
+    #[test]
+    fn wrong_state_does_not_consume_the_bounded_session() {
+        let port = LoopbackCallbackPort::with_timeout(Duration::from_secs(1));
+        let mut session = port.bind().expect("bind callback");
+        let address = session
+            .redirect_uri()
+            .strip_prefix("http://")
+            .expect("http redirect")
+            .strip_suffix(CALLBACK_PATH)
+            .expect("callback path")
+            .to_owned();
+        let client_authority = address.clone();
+        let client = std::thread::spawn(move || {
+            for (state, code) in [("wrong-state", "wrong"), (STATE, "right")] {
+                let mut stream = TcpStream::connect(&address).expect("connect callback");
+                write!(
+                    stream,
+                    "GET {CALLBACK_PATH}?code={code}&state={state} HTTP/1.1\r\nHost: {client_authority}\r\n\r\n"
+                )
+                .expect("send callback");
+                let mut response = String::new();
+                stream.read_to_string(&mut response).expect("read response");
+            }
+        });
+        let attempts = AddAccountAttemptGuardSet::new();
+        let guard = attempts.begin().expect("attempt");
+        let callback =
+            tauri::async_runtime::block_on(session.receive(STATE, &guard.cancellation()))
+                .expect("valid callback after wrong state");
+        client.join().expect("client thread");
+        assert_eq!(callback.code.expose(), "right");
+    }
+
+    #[test]
+    fn partial_traffic_does_not_extend_the_shared_deadline() {
+        let timeout = Duration::from_millis(80);
+        let port = LoopbackCallbackPort::with_timeout(timeout);
+        let mut session = port.bind().expect("bind callback");
+        let address = session
+            .redirect_uri()
+            .strip_prefix("http://")
+            .expect("http redirect")
+            .strip_suffix(CALLBACK_PATH)
+            .expect("callback path")
+            .to_owned();
+        let client = std::thread::spawn(move || {
+            let mut stream = TcpStream::connect(address).expect("connect partial request");
+            stream
+                .write_all(b"GET /oauth/callback?")
+                .expect("write partial");
+            let mut response = String::new();
+            stream
+                .read_to_string(&mut response)
+                .expect("read timeout response");
+            response
+        });
+        let attempts = AddAccountAttemptGuardSet::new();
+        let guard = attempts.begin().expect("attempt");
+        let started = Instant::now();
+        let error = tauri::async_runtime::block_on(session.receive(STATE, &guard.cancellation()))
+            .unwrap_err();
+        let elapsed = started.elapsed();
+        let response = client.join().expect("client thread");
+
+        assert_eq!(error.tag(), AddAccountErrorTag::Timeout);
+        assert!(elapsed < Duration::from_millis(300));
+        assert!(response.starts_with("HTTP/1.1 408 Request Timeout\r\n"));
     }
 
     #[test]

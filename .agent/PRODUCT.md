@@ -13,7 +13,7 @@ Zerochi is a tiny macOS menu-bar companion that turns newly detected mail into a
 
 ## V1
 
-macOS, menu bar/popup, Gmail personal and Workspace, independent multi-account OAuth, read-only incremental sync and polling, local persistence, native notifications/navigation, global and per-account badges, secure credentials, autostart/lifecycle, pixel-art sprite sheets, dark/light UI. One global pet derives from the sum of active account pending counts.
+macOS, menu bar/popup, Gmail personal and Workspace, independent multi-account OAuth, read-only incremental sync and polling, local persistence, native notifications/navigation, global and per-account badges, secure credentials, autostart/lifecycle, pixel-art sprite sheets, dark/light UI. One global pet uses the sum of active-account Gmail unread counts for its ambient face, phrase, and visible total; Zerochi pending remains the local event/feeding state.
 
 ## Out of scope
 
@@ -21,4 +21,4 @@ Backend, cloud database, Pub/Sub, Electron, AI, mail sending or mutation, Outloo
 
 ## Primary UX
 
-The compact popup is pet-first: pet, friendly status/copy, pending total, small account list, add-account, settings, quit. Account/message clicks delegate to `ExternalNavigationService`; browser `/u/N/` positions are not stable identity.
+The compact popup is pet-first and visually emerges from the menu-bar icon as a rounded comic-style bubble: no native title bar/traffic-light controls, a transparent exterior, a top pointer aligned with the tray icon, and a contained shadow. Inside remain the pet, friendly status/copy, global Gmail INBOX unread total, small account list with matching per-account INBOX unread counts, add-account, settings, and quit. New-mail notifications identify the destination account first, then subject and sender, using only stored metadata and the user's macOS preview policy; activation attempts that Gmail conversation and falls back to the account when the native contextual handoff is rejected. Account/message clicks delegate to `ExternalNavigationService`; browser `/u/N/` positions are not stable identity. Settings provides a manual all-active-account mail check whose acknowledgement means scheduled, not completed.

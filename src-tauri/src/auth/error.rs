@@ -113,8 +113,8 @@ impl AddAccountErrorTag {
             ),
             Self::Timeout => ("Account authorization timed out.", true, false),
             Self::TokenExchangeFailed => (
-                "Google could not complete account authorization.",
-                false,
+                "Google could not complete account authorization. Restart authorization and try again.",
+                true,
                 false,
             ),
             Self::WorkspaceRestricted => (
@@ -224,6 +224,23 @@ mod tests {
                 .is_some_and(|message| !message.is_empty()));
             assert!(value["retryable"].is_boolean());
             assert!(value["actionRequired"].is_boolean());
+        }
+    }
+
+    #[test]
+    fn token_exchange_failure_is_retryable_with_fixed_restart_copy() {
+        let error = AddAccountError::from_tag(AddAccountErrorTag::TokenExchangeFailed);
+        let value = serde_json::to_value(&error).expect("serialize error");
+
+        assert_eq!(value["tag"], "token_exchange_failed");
+        assert_eq!(value["retryable"], true);
+        assert_eq!(value["actionRequired"], false);
+        assert_eq!(
+            value["message"],
+            "Google could not complete account authorization. Restart authorization and try again."
+        );
+        for secret in FIXTURE_SECRETS {
+            assert!(!format!("{error:?} {error}").contains(secret));
         }
     }
 

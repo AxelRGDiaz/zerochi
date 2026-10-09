@@ -3,6 +3,7 @@ export type PetEvent = "new_mail" | "mail_opened" | "mail_eaten" | "inbox_reduce
 export type PetAnimation = `idle_${PetMood}` | "new_mail" | "look_mail" | "eat_mail" | "inbox_reduced" | "inbox_zero" | "sleep";
 
 export interface InboxPetSnapshot {
+  inboxUnreadTotal: number;
   pendingTotal: number;
   accounts: Array<{ accountId: string; pendingCount: number }>;
 }

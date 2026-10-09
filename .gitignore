@@ -14,9 +14,34 @@ dist-ssr
 .env
 .env.*
 !.env.example
+
+# Local credentials and downloaded provider configuration
 client_secret*.json
 google-oauth*.json
 credentials.json
+AuthKey_*.p8
+
+# Apple signing, provisioning, and exported keychain material
+# Certificates and CSRs are not private keys, but stay local to avoid mixing
+# developer identity/provisioning artifacts with repository source.
+*.provisionprofile
+*.mobileprovision
+*.cer
+*.crt
+*.der
+*.csr
+*.p8
+*.p12
+*.pfx
+*.pem
+*.key
+*.keychain
+*.keychain-db
+
+# Other signing containers that must use a local/CI secret store
+*.jks
+*.keystore
+
 *.tsbuildinfo
 vite.config.js
 vite.config.d.ts

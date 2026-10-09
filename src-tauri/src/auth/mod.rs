@@ -11,6 +11,7 @@ mod config;
 mod error;
 mod pkce;
 mod ports;
+mod remove;
 mod request;
 mod secret;
 mod service;
@@ -20,15 +21,21 @@ pub(crate) use attempt::{AddAccountAttemptGuard, AddAccountAttemptGuardSet, Canc
 #[allow(unused_imports)]
 pub(crate) use callback::LoopbackCallbackPort;
 #[allow(unused_imports)]
-pub(crate) use config::{ClientId, Environment, ProcessClientId, ProcessEnvironment};
+pub(crate) use config::{
+    ClientId, ClientSecret, Environment, ProcessClientId, ProcessClientSecret, ProcessEnvironment,
+};
 pub(crate) use error::{AddAccountError, AddAccountErrorTag};
 #[allow(unused_imports)]
 pub(crate) use pkce::{generate_pkce, OsRandom, Pkce, RandomSource};
 #[allow(unused_imports)]
 pub(crate) use ports::{
     AccountIdPort, AuthorizationCallback, BrowserPort, CallbackPort, CallbackSession, ClientIdPort,
-    IdentityPort, PortFuture, RefreshTokenStorePort, TokenExchangePort, TokenExchangeRequest,
-    TokenResponse,
+    ClientSecretPort, IdentityPort, PortFuture, RefreshTokenReadError, RefreshTokenReadPort,
+    RefreshTokenStorePort, TokenExchangePort, TokenExchangeRequest, TokenResponse,
+};
+#[allow(unused_imports)]
+pub(crate) use remove::{
+    RemoveAccountError, RemoveAccountErrorTag, RemoveAccountPorts, RemoveAccountService,
 };
 #[allow(unused_imports)]
 pub(crate) use request::{AuthorizationRequest, LoopbackRedirect, APPROVED_SCOPES};

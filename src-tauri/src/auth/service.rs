@@ -1,7 +1,7 @@
 use super::{
     generate_pkce, AccountIdPort, AddAccountAttemptGuardSet, AddAccountError, AddAccountErrorTag,
-    BrowserPort, CallbackPort, ClientIdPort, IdentityPort, LoopbackRedirect, RandomSource,
-    RefreshTokenStorePort, TokenExchangePort, TokenExchangeRequest,
+    BrowserPort, CallbackPort, ClientIdPort, ClientSecretPort, IdentityPort, LoopbackRedirect,
+    RandomSource, RefreshTokenStorePort, TokenExchangePort, TokenExchangeRequest,
 };
 use crate::accounts::{AccountStatePort, MailAccount};
 use std::sync::Arc;
@@ -10,6 +10,7 @@ use zeroize::Zeroize;
 
 pub(crate) struct AddAccountPorts {
     pub(crate) client_id: Arc<dyn ClientIdPort>,
+    pub(crate) client_secret: Arc<dyn ClientSecretPort>,
     pub(crate) random: Arc<dyn RandomSource>,
     pub(crate) browser: Arc<dyn BrowserPort>,
     pub(crate) callback: Arc<dyn CallbackPort>,
@@ -37,6 +38,7 @@ impl AddAccountService {
         let guard = self.attempts.begin()?;
         let cancellation = guard.cancellation();
         let client_id = self.ports.client_id.load()?;
+        let client_secret = self.ports.client_secret.load()?;
         cancellation.ensure_active()?;
 
         let mut callback = self.ports.callback.bind()?;
@@ -57,6 +59,7 @@ impl AddAccountService {
             .exchange(
                 TokenExchangeRequest {
                     client_id: &client_id,
+                    client_secret: &client_secret,
                     redirect_uri: request.redirect_uri(),
                     code: &callback_result.code,
                     verifier: request.verifier(),
@@ -181,6 +184,26 @@ mod tests {
         }
     }
 
+    struct Secret;
+    impl ClientSecretPort for Secret {
+        fn load(&self) -> Result<crate::auth::ClientSecret, AddAccountError> {
+            struct Env;
+            impl Environment for Env {
+                fn var_os(&self, _name: &str) -> Option<OsString> {
+                    Some("fixture-client-secret-value".into())
+                }
+            }
+            crate::auth::ClientSecret::load_from(&Env)
+        }
+    }
+
+    struct MissingSecret;
+    impl ClientSecretPort for MissingSecret {
+        fn load(&self) -> Result<crate::auth::ClientSecret, AddAccountError> {
+            Err(AddAccountError::from_tag(AddAccountErrorTag::ConfigInvalid))
+        }
+    }
+
     struct Random(Mutex<VecDeque<[u8; 32]>>);
     impl RandomSource for Random {
         fn fill(&self, destination: &mut [u8]) -> Result<(), AddAccountError> {
@@ -258,6 +281,10 @@ mod tests {
         ) -> PortFuture<'a, Result<TokenResponse, AddAccountError>> {
             self.events.push("exchange");
             assert_eq!(request.code.expose(), "fixture-code");
+            assert_eq!(
+                request.client_secret.expose(),
+                "fixture-client-secret-value"
+            );
             let refresh = self.refresh;
             Box::pin(async move {
                 Ok(TokenResponse {
@@ -335,7 +362,12 @@ mod tests {
         events: Arc<Events>,
         fail: bool,
     }
+
     impl AccountStatePort for Accounts {
+        fn snapshot(&self) -> Result<Vec<MailAccount>, crate::accounts::AccountStateError> {
+            Ok(Vec::new())
+        }
+
         fn commit<'a>(
             &'a self,
             account: MailAccount,
@@ -353,6 +385,19 @@ mod tests {
                 }
             })
         }
+
+        fn update_sync_cursor<'a>(
+            &'a self,
+            _account_id: &'a str,
+            _history_id: String,
+            _synced_at: String,
+            _inbox_unread_count: u64,
+        ) -> crate::accounts::AccountFuture<
+            'a,
+            Result<MailAccount, crate::accounts::AccountStateError>,
+        > {
+            Box::pin(async { Err(crate::accounts::AccountStateError) })
+        }
     }
 
     fn service(
@@ -364,6 +409,7 @@ mod tests {
     ) -> AddAccountService {
         AddAccountService::new(AddAccountPorts {
             client_id: Arc::new(Config),
+            client_secret: Arc::new(Secret),
             random: Arc::new(Random(Mutex::new(VecDeque::from([[0x11; 32], [0x22; 32]])))),
             browser: Arc::new(Browser(Arc::clone(&events))),
             callback: Arc::new(Callback(Arc::clone(&events))),
@@ -401,6 +447,19 @@ mod tests {
         assert!(!serialized.contains("fixture-access"));
         assert!(!serialized.contains("fixture-refresh"));
         assert!(!serialized.contains("fixture-code"));
+        assert!(!serialized.contains("fixture-client-secret-value"));
+    }
+
+    #[test]
+    fn missing_client_credential_fails_before_binding_or_opening_browser() {
+        let events = Arc::new(Events::default());
+        let mut service = service(Arc::clone(&events), true, false, false, false);
+        service.ports.client_secret = Arc::new(MissingSecret);
+
+        let error = tauri::async_runtime::block_on(service.add_account()).unwrap_err();
+
+        assert_eq!(error.tag(), AddAccountErrorTag::ConfigInvalid);
+        assert!(events.lock().is_empty());
     }
 
     #[test]

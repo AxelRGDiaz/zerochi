@@ -8,7 +8,10 @@
     "build": "tsc && vite build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check": "npm run test && npm run build",
+    "check": "npm run test && npm run test:release-env && npm run build",
+    "test:release-env": "node --test scripts/oauth-release-environment.node-test.mjs",
+    "check:oauth-artifacts": "node scripts/check-oauth-build-artifacts.mjs",
+    "tauri:release": "node scripts/build-tauri-release.mjs",
     "herdr": "node scripts/herdr-zerochi.mjs",
     "herdr:setup": "node scripts/herdr-zerochi.mjs --setup-only",
     "herdr:dry-run": "node scripts/herdr-zerochi.mjs --dry-run",
@@ -17,17 +20,17 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@tauri-apps/api": "^2.12.2",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0",
-    "@tauri-apps/api": "^2"
+    "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.12.1",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
-    "vitest": "^3.2.4",
     "typescript": "~5.8.3",
     "vite": "^7.0.4",
-    "@tauri-apps/cli": "^2"
+    "vitest": "^3.2.4"
   }
 }

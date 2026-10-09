@@ -4,8 +4,7 @@ use url::{Host, Url};
 
 const GOOGLE_AUTHORIZATION_ENDPOINT: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const CALLBACK_PATH: &str = "/oauth/callback";
-pub(crate) const APPROVED_SCOPES: &str =
-    "openid email profile https://www.googleapis.com/auth/gmail.readonly";
+pub(crate) const APPROVED_SCOPES: &str = "https://www.googleapis.com/auth/gmail.readonly";
 
 pub(crate) struct LoopbackRedirect(Url);
 
@@ -209,15 +208,7 @@ mod tests {
         let pairs: HashMap<_, _> = parsed.query_pairs().into_owned().collect();
         let scopes: Vec<_> = pairs["scope"].split(' ').collect();
 
-        assert_eq!(
-            scopes,
-            [
-                "openid",
-                "email",
-                "profile",
-                "https://www.googleapis.com/auth/gmail.readonly"
-            ]
-        );
+        assert_eq!(scopes, ["https://www.googleapis.com/auth/gmail.readonly"]);
         assert!(!pairs.contains_key("client_secret"));
         assert!(!pairs.contains_key("code_verifier"));
         assert!(!request.url().contains(request.verifier()));

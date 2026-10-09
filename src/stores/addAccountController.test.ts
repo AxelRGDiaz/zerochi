@@ -37,6 +37,7 @@ describe("add account controller", () => {
 
     expect(controller.getSnapshot()).toEqual({
       accounts: [],
+      messages: [],
       addAccountState: { status: "idle" },
     });
   });
@@ -76,14 +77,60 @@ describe("add account controller", () => {
     expect(controller.getSnapshot().accounts[1]).toEqual(updatedAccount);
   });
 
+  it("hydrates persisted accounts without changing the add-account presentation state", () => {
+    const controller = createAddAccountController(vi.fn<AddAccountPort>());
+
+    controller.hydrateSnapshot({ accounts: [personalAccount], messages: [] });
+
+    expect(controller.getSnapshot()).toEqual({
+      accounts: [personalAccount],
+      messages: [],
+      addAccountState: { status: "idle" },
+    });
+  });
+
   it.each([
-    [commandError("cancelled"), "cancelled"],
-    [commandError("network_unavailable", true), "retryable_error"],
-    [commandError("workspace_restricted", false, true), "action_required"],
-    [commandError("internal"), "error"],
-    [new Error("untyped failure"), "error"],
-  ] as const)("classifies command failures into fixed UI states", (error, status) => {
-    expect(classifyAddAccountError(error)).toEqual({ status });
+    [commandError("cancelled"), { status: "cancelled", tag: "cancelled", retryable: false, actionRequired: false }],
+    [commandError("network_unavailable", true), { status: "retryable_error", tag: "network_unavailable", retryable: true, actionRequired: false }],
+    [commandError("workspace_restricted", false, true), { status: "action_required", tag: "workspace_restricted", retryable: false, actionRequired: true }],
+    [commandError("internal"), { status: "error", tag: "internal", retryable: false, actionRequired: false }],
+    [new Error("untyped failure"), { status: "error" }],
+  ] as const)("classifies command failures into fixed UI states", (error, expected) => {
+    expect(classifyAddAccountError(error)).toEqual(expected);
+  });
+
+  it.each([
+    "auth_in_progress",
+    "browser_open_failed",
+    "callback_invalid",
+    "cancelled",
+    "config_invalid",
+    "identity_invalid",
+    "internal",
+    "network_unavailable",
+    "provider_denied",
+    "refresh_token_missing",
+    "secure_store_failed",
+    "timeout",
+    "token_exchange_failed",
+    "workspace_restricted",
+  ] satisfies readonly AddAccountErrorTag[])("retains the approved %s tag and sanitized flags", (tag) => {
+    const state = classifyAddAccountError(commandError(tag, true, true));
+
+    expect(state).toMatchObject({ tag, retryable: true, actionRequired: true });
+    expect(JSON.stringify(state)).not.toContain("sanitized");
+  });
+
+  it("drops unapproved runtime tags and provider messages into the generic error state", () => {
+    const state = classifyAddAccountError({
+      tag: "provider_private_diagnostic",
+      message: "refresh_token=secret user@example.com",
+      retryable: true,
+      actionRequired: true,
+    });
+
+    expect(state).toEqual({ status: "error" });
+    expect(JSON.stringify(state)).not.toMatch(/provider_private|refresh_token|secret|user@example\.com/i);
   });
 
   it("retries only a retryable failure and succeeds on the next invocation", async () => {
@@ -93,7 +140,12 @@ describe("add account controller", () => {
     const controller = createAddAccountController(port);
 
     await controller.addAccount();
-    expect(controller.getSnapshot().addAccountState).toEqual({ status: "retryable_error" });
+    expect(controller.getSnapshot().addAccountState).toEqual({
+      status: "retryable_error",
+      tag: "timeout",
+      retryable: true,
+      actionRequired: false,
+    });
 
     await controller.retry();
     expect(port).toHaveBeenCalledTimes(2);

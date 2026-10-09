@@ -53,6 +53,8 @@ describe("ProviderSelectionView", () => {
 
     expect(markup).toContain('aria-label="Agregar cuenta de Gmail" disabled=""');
     expect(markup).toContain("Conectando…");
+    expect(markup).toContain("Completa el acceso en Google.");
+    expect(markup).toContain("Zerochi volverá a mostrarse");
   });
 
   it("wires only Gmail to the existing duplicate-safe controller", async () => {

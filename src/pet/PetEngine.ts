@@ -1,10 +1,21 @@
 import { MOOD_THRESHOLDS } from "./PetConfig";
-import { PET_COPY } from "./PetCopy";
+import { PET_COPY, PET_IDLE_COPY_VARIANTS } from "./PetCopy";
 import type { InboxPetSnapshot, PetAnimation, PetEvent, PetMood, PetPresentation } from "./PetState";
 
-export function moodForPending(pendingTotal: number): PetMood {
-  const safePending = Math.max(0, Math.floor(pendingTotal));
-  return MOOD_THRESHOLDS.find(({ minimum }) => safePending >= minimum)!.mood;
+function normalizePending(pendingTotal: number): number {
+  return Number.isFinite(pendingTotal) ? Math.max(0, Math.floor(pendingTotal)) : 0;
+}
+
+export function moodForUnread(inboxUnreadTotal: number): PetMood {
+  const safeUnread = normalizePending(inboxUnreadTotal);
+  return MOOD_THRESHOLDS.find(({ minimum }) => safeUnread >= minimum)!.mood;
+}
+
+export function idleCopyForUnread(inboxUnreadTotal: number): string {
+  const safeUnread = normalizePending(inboxUnreadTotal);
+  const threshold = MOOD_THRESHOLDS.find(({ minimum }) => safeUnread >= minimum)!;
+  const variants = PET_IDLE_COPY_VARIANTS[threshold.mood];
+  return variants[(safeUnread - threshold.minimum) % variants.length];
 }
 
 export function eventForTransition(previous: number, current: number): PetEvent {
@@ -17,7 +28,10 @@ export function eventForTransition(previous: number, current: number): PetEvent 
 }
 
 export function presentPet(snapshot: InboxPetSnapshot, event: PetEvent = "idle"): PetPresentation {
-  const mood = moodForPending(snapshot.pendingTotal);
+  const mood = moodForUnread(snapshot.inboxUnreadTotal);
+  if (snapshot.accounts.length === 0) {
+    return { mood, animation: "sleep", message: PET_COPY.idle };
+  }
   const animation: PetAnimation = event === "idle" ? `idle_${mood}` : event === "mail_opened" ? "look_mail" : event === "mail_eaten" ? "eat_mail" : event;
-  return { mood, animation, message: event === "idle" ? PET_COPY[mood] : PET_COPY[event] };
+  return { mood, animation, message: event === "idle" ? idleCopyForUnread(snapshot.inboxUnreadTotal) : PET_COPY[event] };
 }

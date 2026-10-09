@@ -46,8 +46,18 @@ describe("add account UI flow", () => {
     await completeAddAccountAttempt(cancelledController, cancelledController.addAccount, cancelledNavigation.back);
     await completeAddAccountAttempt(actionController, actionController.addAccount, actionNavigation.back);
 
-    expect(cancelledController.getSnapshot().addAccountState).toEqual({ status: "cancelled" });
-    expect(actionController.getSnapshot().addAccountState).toEqual({ status: "action_required" });
+    expect(cancelledController.getSnapshot().addAccountState).toEqual({
+      status: "cancelled",
+      tag: "cancelled",
+      retryable: false,
+      actionRequired: false,
+    });
+    expect(actionController.getSnapshot().addAccountState).toEqual({
+      status: "action_required",
+      tag: "workspace_restricted",
+      retryable: false,
+      actionRequired: true,
+    });
     expect(cancelledNavigation.getSnapshot()).toEqual({ route: "add_account" });
     expect(actionNavigation.getSnapshot()).toEqual({ route: "add_account" });
   });
@@ -60,7 +70,12 @@ describe("add account UI flow", () => {
     const navigation = createAppNavigationStore("add_account");
 
     await completeAddAccountAttempt(controller, controller.addAccount, navigation.back);
-    expect(controller.getSnapshot().addAccountState).toEqual({ status: "retryable_error" });
+    expect(controller.getSnapshot().addAccountState).toEqual({
+      status: "retryable_error",
+      tag: "timeout",
+      retryable: true,
+      actionRequired: false,
+    });
     expect(navigation.getSnapshot()).toEqual({ route: "add_account" });
 
     await completeAddAccountAttempt(controller, controller.retry, navigation.back);

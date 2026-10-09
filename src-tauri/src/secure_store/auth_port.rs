@@ -4,16 +4,24 @@ use uuid::Uuid;
 use zeroize::Zeroizing;
 
 use super::{DeploymentMode, SecureStore, SecureStoreError};
-use crate::auth::{AddAccountError, AddAccountErrorTag, PortFuture, RefreshTokenStorePort};
+use crate::auth::{
+    AddAccountError, AddAccountErrorTag, PortFuture, RefreshTokenReadError, RefreshTokenReadPort,
+    RefreshTokenStorePort,
+};
 
 trait RefreshTokenStorage: Send + Sync {
     fn set(&self, account_id: Uuid, refresh_token: &[u8]) -> Result<(), SecureStoreError>;
+    fn get(&self, account_id: Uuid) -> Result<Option<Zeroizing<Vec<u8>>>, SecureStoreError>;
     fn delete(&self, account_id: Uuid) -> Result<(), SecureStoreError>;
 }
 
 impl RefreshTokenStorage for SecureStore {
     fn set(&self, account_id: Uuid, refresh_token: &[u8]) -> Result<(), SecureStoreError> {
         self.set_refresh_token(account_id, refresh_token)
+    }
+
+    fn get(&self, account_id: Uuid) -> Result<Option<Zeroizing<Vec<u8>>>, SecureStoreError> {
+        self.get_refresh_token(account_id)
     }
 
     fn delete(&self, account_id: Uuid) -> Result<(), SecureStoreError> {
@@ -76,12 +84,36 @@ impl RefreshTokenStorePort for SecureRefreshTokenStorePort {
     }
 }
 
+impl RefreshTokenReadPort for SecureRefreshTokenStorePort {
+    fn get<'a>(
+        &'a self,
+        account_id: Uuid,
+    ) -> PortFuture<'a, Result<Option<Zeroizing<Vec<u8>>>, RefreshTokenReadError>> {
+        Box::pin(async move {
+            self.storage
+                .get(account_id)
+                .map_err(refresh_token_read_failed)
+        })
+    }
+}
+
 fn secure_store_failed(_error: SecureStoreError) -> AddAccountError {
     secure_store_failed_sanitized()
 }
 
 fn secure_store_failed_sanitized() -> AddAccountError {
     AddAccountError::from_tag(AddAccountErrorTag::SecureStoreFailed)
+}
+
+fn refresh_token_read_failed(error: SecureStoreError) -> RefreshTokenReadError {
+    match error.kind() {
+        super::SecureStoreErrorKind::AccessDeniedOrLocked => {
+            RefreshTokenReadError::AccessDeniedOrLocked
+        }
+        super::SecureStoreErrorKind::InvalidSecret | super::SecureStoreErrorKind::Unavailable => {
+            RefreshTokenReadError::Unavailable
+        }
+    }
 }
 
 #[cfg(test)]
@@ -102,12 +134,14 @@ mod tests {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum Operation {
         Set(Uuid),
+        Get(Uuid),
         Delete(Uuid),
     }
 
     struct FakeStorage {
         operations: Mutex<Vec<Operation>>,
         failure: Option<SecureStoreErrorKind>,
+        secret: Option<Vec<u8>>,
     }
 
     impl FakeStorage {
@@ -115,6 +149,15 @@ mod tests {
             Self {
                 operations: Mutex::new(Vec::new()),
                 failure: None,
+                secret: Some(SECRET.to_vec()),
+            }
+        }
+
+        fn missing() -> Self {
+            Self {
+                operations: Mutex::new(Vec::new()),
+                failure: None,
+                secret: None,
             }
         }
 
@@ -122,6 +165,7 @@ mod tests {
             Self {
                 operations: Mutex::new(Vec::new()),
                 failure: Some(kind),
+                secret: Some(SECRET.to_vec()),
             }
         }
 
@@ -147,6 +191,15 @@ mod tests {
                 .map_err(|_| SecureStoreError::unavailable())?
                 .push(Operation::Set(account_id));
             self.result()
+        }
+
+        fn get(&self, account_id: Uuid) -> Result<Option<Zeroizing<Vec<u8>>>, SecureStoreError> {
+            self.operations
+                .lock()
+                .map_err(|_| SecureStoreError::unavailable())?
+                .push(Operation::Get(account_id));
+            self.result()?;
+            Ok(self.secret.clone().map(Zeroizing::new))
         }
 
         fn delete(&self, account_id: Uuid) -> Result<(), SecureStoreError> {
@@ -182,6 +235,64 @@ mod tests {
                 Operation::Set(ACCOUNT_UUID),
                 Operation::Delete(ACCOUNT_UUID)
             ]
+        );
+    }
+
+    #[test]
+    fn get_returns_zeroizing_bytes_for_the_typed_uuid() {
+        let storage = Arc::new(FakeStorage::available());
+        let adapter = SecureRefreshTokenStorePort::with_storage(storage.clone());
+
+        let secret = block_on_ready(RefreshTokenReadPort::get(&adapter, ACCOUNT_UUID))
+            .expect("get")
+            .expect("stored refresh token");
+
+        assert_eq!(secret.as_slice(), SECRET);
+        assert_eq!(
+            storage.operations.lock().expect("operations").as_slice(),
+            [Operation::Get(ACCOUNT_UUID)]
+        );
+    }
+
+    #[test]
+    fn missing_refresh_token_is_none_without_synthesizing_a_secret() {
+        let storage = Arc::new(FakeStorage::missing());
+        let adapter = SecureRefreshTokenStorePort::with_storage(storage);
+
+        let result = block_on_ready(RefreshTokenReadPort::get(&adapter, ACCOUNT_UUID))
+            .expect("missing is not a storage failure");
+
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn locked_read_is_redacted_and_keeps_only_the_internal_category() {
+        let storage = Arc::new(FakeStorage::failing(
+            SecureStoreErrorKind::AccessDeniedOrLocked,
+        ));
+        let adapter = SecureRefreshTokenStorePort::with_storage(storage);
+
+        let error = block_on_ready(RefreshTokenReadPort::get(&adapter, ACCOUNT_UUID))
+            .expect_err("locked store must fail closed");
+
+        assert_eq!(error, RefreshTokenReadError::AccessDeniedOrLocked);
+        let rendered = format!("{error:?} {error}");
+        assert!(!rendered.contains(&ACCOUNT_UUID.to_string()));
+        assert!(!rendered.contains("Keychain"));
+        assert!(!rendered.contains("refresh"));
+    }
+
+    #[test]
+    fn reads_preserve_typed_uuid_account_isolation() {
+        let storage = Arc::new(FakeStorage::available());
+        let adapter = SecureRefreshTokenStorePort::with_storage(storage.clone());
+
+        block_on_ready(RefreshTokenReadPort::get(&adapter, ACCOUNT_UUID)).expect("account A");
+        block_on_ready(RefreshTokenReadPort::get(&adapter, ACCOUNT_UUID_B)).expect("account B");
+
+        assert_eq!(
+            storage.operations.lock().expect("operations").as_slice(),
+            [Operation::Get(ACCOUNT_UUID), Operation::Get(ACCOUNT_UUID_B)]
         );
     }
 
