@@ -44,6 +44,21 @@ Zerochi is a public installed OAuth client and uses Authorization Code + PKCE. G
 
 Run `npm run tauri:release` for production packaging. CI supplies both `ZEROCHI_GOOGLE_CLIENT_ID` and `ZEROCHI_GOOGLE_CLIENT_SECRET` as protected process variables. For a local release, the wrapper uses the ignored root `.env` when neither process variable is set; a complete process pair takes priority and a partial process pair fails instead of mixing sources. The wrapper creates a fresh ephemeral Cargo target, builds the app, and scans textual build outputs for the raw credential without printing it. Runtime release code never reads `.env`. Raw `cargo build --release`/`npm run tauri build` release paths fail closed so a stale credential cannot be reused accidentally. Upload only the final `.app`/installer reported by the wrapper; never cache or upload its temporary Cargo target. The native executable necessarily contains the extractable shared credential. The recipient's Mac requires no OAuth environment variables. Rotating the Desktop credential requires another wrapper build and redistribution.
 
+## Microsoft (Outlook) configuration
+
+Outlook support covers personal Microsoft accounts (outlook.com, hotmail.com, live.com) through Microsoft Graph with the read-only `Mail.Read` permission. Register an application in [Microsoft Entra](https://entra.microsoft.com) under **App registrations**:
+
+1. Supported account types: any option that includes **personal Microsoft accounts**.
+2. Redirect URI: platform **Public client/native (mobile & desktop)**, value `http://localhost`.
+3. API permissions: Microsoft Graph delegated `Mail.Read`, `User.Read`, and `offline_access`.
+4. Copy the **Application (client) ID** into the ignored `.env`:
+
+```dotenv
+ZEROCHI_MICROSOFT_CLIENT_ID=your-application-client-id
+```
+
+The Entra client ID is a public identifier and there is no client secret: the flow is Authorization Code + PKCE only. The variable is optional; without it Gmail keeps working and adding an Outlook account reports a configuration error. Debug builds read it from the process environment or `.env`; `npm run tauri:release` embeds it when present. Work or school accounts are not supported yet.
+
 User refresh tokens are different from the Google application Client ID: refresh tokens will be stored per account in macOS Keychain through the Rust `SecureStore`. They must never be written to `.env`, React, web storage, plaintext files, logs, or the repository.
 
 ## Signing, notarization, and sensitive local files

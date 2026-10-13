@@ -1,6 +1,6 @@
 use super::{RefreshTokenReadPort, RefreshTokenStorePort};
 use crate::{
-    accounts::{AccountStatePort, MailStateSnapshot},
+    accounts::{AccountStatePort, MailProvider, MailStateSnapshot},
     gmail::TokenRevokePort,
 };
 use serde::Serialize;
@@ -86,22 +86,25 @@ impl RemoveAccountService {
         account_id: Uuid,
     ) -> Result<MailStateSnapshot, RemoveAccountError> {
         let canonical_id = account_id.hyphenated().to_string();
-        let exists = self
+        let provider = self
             .ports
             .accounts
             .snapshot()
             .map_err(|_| RemoveAccountError::new(RemoveAccountErrorTag::Internal))?
             .iter()
-            .any(|account| account.id() == canonical_id);
-        if !exists {
-            return Err(RemoveAccountError::new(
+            .find(|account| account.id() == canonical_id)
+            .map(|account| account.provider())
+            .ok_or(RemoveAccountError::new(
                 RemoveAccountErrorTag::AccountNotFound,
-            ));
-        }
+            ))?;
 
-        if let Ok(Some(refresh_token)) = self.ports.refresh_tokens.get(account_id).await {
-            // Revocation is bounded and best-effort. Local unlink must remain available offline.
-            let _ = self.ports.revoker.revoke(refresh_token.as_slice()).await;
+        // The revoker is Google's endpoint: another provider's refresh token must never be sent
+        // there. Entra has no public-client revocation endpoint, so Outlook unlinks locally only.
+        if provider == MailProvider::Gmail {
+            if let Ok(Some(refresh_token)) = self.ports.refresh_tokens.get(account_id).await {
+                // Revocation is bounded and best-effort. Local unlink must remain available offline.
+                let _ = self.ports.revoker.revoke(refresh_token.as_slice()).await;
+            }
         }
 
         self.ports
@@ -377,5 +380,28 @@ mod tests {
             serde_json::to_string(&error.tag()).expect("tag"),
             "\"account_not_found\""
         );
+    }
+
+    #[test]
+    fn outlook_account_unlinks_locally_without_reaching_the_google_revoke_endpoint() {
+        let events = Arc::new(Events::default());
+        let (service, accounts) = service(
+            events.clone(),
+            Ok(Some(b"fixture-refresh-token".to_vec())),
+            false,
+            false,
+        );
+        accounts.accounts.lock().expect("accounts")[0] = MailAccount::with_provider(
+            ACCOUNT_ID.hyphenated().to_string(),
+            "removed@example.test".into(),
+            None,
+            MailProvider::Outlook,
+        );
+
+        let snapshot = tauri::async_runtime::block_on(service.remove_account(ACCOUNT_ID))
+            .expect("remove account");
+
+        assert_eq!(&*events.lock(), &["delete", "remove"]);
+        assert_eq!(snapshot.accounts.len(), 1);
     }
 }

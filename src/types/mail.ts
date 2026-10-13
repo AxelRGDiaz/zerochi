@@ -1,6 +1,10 @@
+export type MailProviderId = "gmail" | "outlook";
+
 export interface MailAccount {
   id: string;
   email: string;
+  /** Absent means Gmail: accounts stored before providers existed carry no value. */
+  provider?: MailProviderId;
   displayName?: string;
   pendingCount: number;
   inboxUnreadCount?: number;

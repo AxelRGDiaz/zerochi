@@ -18,6 +18,7 @@ use crate::auth::{
 
 const GMAIL_ACCOUNT_ENDPOINT: &str = "https://mail.google.com/mail/u/";
 const GMAIL_THREAD_ID_MAX_BYTES: usize = 256;
+const OUTLOOK_MAIL_ENDPOINT: &str = "https://outlook.live.com/mail/";
 
 trait NativeUrlOpener: Send + Sync {
     fn open(&self, url: &str) -> Result<(), ()>;
@@ -82,6 +83,12 @@ impl std::error::Error for ExternalNavigationError {}
 pub(crate) trait ExternalNavigationService: Send + Sync {
     fn open_account(&self, email: &str) -> Result<(), ExternalNavigationError>;
 
+    /// Opens the Outlook.com inbox for a personal Microsoft account. Outlook on the web has no
+    /// stable per-message link derivable from stored metadata, so messages also land here.
+    fn open_outlook_account(&self, _email: &str) -> Result<(), ExternalNavigationError> {
+        Err(ExternalNavigationError)
+    }
+
     /// Opens one Gmail conversation when supported, otherwise safely falls back to the account.
     fn open_message(&self, email: &str, thread_id: &str) -> Result<(), ExternalNavigationError> {
         validate_thread_id(thread_id)?;
@@ -128,6 +135,39 @@ impl ExternalNavigationService for MacOsExternalNavigationService {
         }
 
         self.open_account(email)
+    }
+
+    fn open_outlook_account(&self, email: &str) -> Result<(), ExternalNavigationError> {
+        let url = outlook_account_url(email)?;
+        self.opener
+            .open(url.as_str())
+            .map_err(|_| ExternalNavigationError)
+    }
+}
+
+fn outlook_account_url(email: &str) -> Result<Url, ExternalNavigationError> {
+    if email.is_empty() || email.chars().any(char::is_control) {
+        return Err(ExternalNavigationError);
+    }
+
+    let mut url = Url::parse(OUTLOOK_MAIL_ENDPOINT).map_err(|_| ExternalNavigationError)?;
+    {
+        let mut query = url.query_pairs_mut();
+        query.clear().append_pair("login_hint", email);
+    }
+
+    let allowlisted = url.scheme() == "https"
+        && matches!(url.host(), Some(Host::Domain("outlook.live.com")))
+        && url.port().is_none()
+        && url.path() == "/mail/"
+        && url.username().is_empty()
+        && url.password().is_none()
+        && url.fragment().is_none();
+
+    if allowlisted {
+        Ok(url)
+    } else {
+        Err(ExternalNavigationError)
     }
 }
 
@@ -525,5 +565,16 @@ mod tests {
         assert!(!rendered.contains(&account_url));
         assert!(!rendered.contains("/usr/bin/open"));
         assert!(!rendered.contains("mail.google.com"));
+    }
+
+    #[test]
+    fn outlook_account_opens_the_allowlisted_inbox_with_an_encoded_login_hint() {
+        let url = outlook_account_url("user+tag@outlook.com").expect("outlook url");
+        assert_eq!(
+            url.as_str(),
+            "https://outlook.live.com/mail/?login_hint=user%2Btag%40outlook.com"
+        );
+        assert!(outlook_account_url("").is_err());
+        assert!(outlook_account_url("user@outlook.com\n").is_err());
     }
 }

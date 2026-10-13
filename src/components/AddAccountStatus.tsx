@@ -1,8 +1,10 @@
 import type { AddAccountState } from "../stores/addAccountController";
 import type { AddAccountErrorTag } from "../types/contracts";
+import type { MailProviderId } from "../types/mail";
 
 interface AddAccountStatusProps {
   state: AddAccountState;
+  provider?: MailProviderId;
   onRetry: () => void;
 }
 
@@ -93,7 +95,12 @@ function presentationFor(state: Exclude<AddAccountState, { status: "idle" }>): S
   return { message: "No pudimos agregar la cuenta.", role: "alert" };
 }
 
-export function AddAccountStatus({ state, onRetry }: AddAccountStatusProps) {
+// The copy is written for Google; the sign-in company is the only provider-specific part.
+function forProvider(text: string, provider: MailProviderId): string {
+  return provider === "outlook" ? text.split("Google").join("Microsoft") : text;
+}
+
+export function AddAccountStatus({ state, provider = "gmail", onRetry }: AddAccountStatusProps) {
   if (state.status === "idle") return null;
   const presentation = presentationFor(state);
   const canRetry = "retryable" in state && state.retryable;
@@ -104,8 +111,10 @@ export function AddAccountStatus({ state, onRetry }: AddAccountStatusProps) {
       role={presentation.role}
       aria-live={presentation.role === "alert" ? "assertive" : "polite"}
     >
-      <p className="add-account-status">{presentation.message}</p>
-      {presentation.detail && <p className="add-account-detail">{presentation.detail}</p>}
+      <p className="add-account-status">{forProvider(presentation.message, provider)}</p>
+      {presentation.detail && (
+        <p className="add-account-detail">{forProvider(presentation.detail, provider)}</p>
+      )}
       {canRetry && (
         <button className="retry-button" type="button" aria-label="Reintentar agregar cuenta" onClick={onRetry}>
           Reintentar

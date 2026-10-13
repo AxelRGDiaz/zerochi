@@ -23,12 +23,13 @@ export function AccountList({
         const openStatus = openAccountStatuses[account.id];
         const opening = openStatus === "pending";
         const inboxUnreadCount = normalizeInboxUnreadCount(account.inboxUnreadCount);
+        const providerName = account.provider === "outlook" ? "Outlook" : "Gmail";
         return (
           <li key={account.id} aria-busy={opening || undefined}>
             <button
               className="account-row"
               type="button"
-              aria-label={`Abrir Gmail de ${account.displayName ?? account.email}`}
+              aria-label={`Abrir ${providerName} de ${account.displayName ?? account.email}`}
               disabled={opening}
               onClick={() => onOpenAccount(account.id)}
             >
@@ -53,12 +54,12 @@ export function AccountList({
             </button>
             {opening && (
               <span className="account-open-status" role="status" aria-live="polite">
-                Abriendo Gmail…
+                Abriendo {providerName}…
               </span>
             )}
             {openStatus === "error" && (
               <span className="account-open-error" role="alert">
-                No pudimos abrir Gmail. Inténtalo de nuevo.
+                No pudimos abrir {providerName}. Inténtalo de nuevo.
               </span>
             )}
           </li>

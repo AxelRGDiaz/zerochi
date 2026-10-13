@@ -5,10 +5,10 @@ import type {
   AppSnapshot,
   CommandError,
 } from "../types/contracts";
-import type { MailAccount, MailMessage } from "../types/mail";
+import type { MailAccount, MailMessage, MailProviderId } from "../types/mail";
 import { normalizeInboxUnreadCount } from "./mailCounters";
 
-export type AddAccountPort = () => Promise<AddAccountResult>;
+export type AddAccountPort = (provider: MailProviderId) => Promise<AddAccountResult>;
 
 interface TaggedAddAccountFailure {
   tag: AddAccountErrorTag;
@@ -30,6 +30,8 @@ export interface AddAccountSnapshot {
   accounts: MailAccount[];
   messages: MailMessage[];
   addAccountState: AddAccountState;
+  /** Provider of the latest attempt, so feedback and retry address the same provider. */
+  addAccountProvider: MailProviderId;
 }
 
 type AddAccountListener = () => void;
@@ -41,7 +43,7 @@ export interface AddAccountController {
   hydrateSnapshot(snapshot: AppSnapshot, expectedLiveRevision?: number): void;
   applySnapshot(snapshot: AppSnapshot): void;
   applyRemovalSnapshot(snapshot: AppSnapshot, removedAccountId: string): void;
-  addAccount(): Promise<void>;
+  addAccount(provider?: MailProviderId): Promise<void>;
   retry(): Promise<void>;
 }
 
@@ -53,6 +55,7 @@ function normalizedAccount(account: MailAccount): MailAccount {
     active: account.active,
   };
 
+  if (account.provider === "outlook") normalized.provider = "outlook";
   if (account.displayName !== undefined) normalized.displayName = account.displayName;
   if (account.inboxUnreadCount !== undefined) {
     normalized.inboxUnreadCount = normalizeInboxUnreadCount(account.inboxUnreadCount);
@@ -135,6 +138,7 @@ export function createAddAccountController(
     accounts: initialAccounts.map(normalizedAccount),
     messages: [],
     addAccountState: { status: "idle" },
+    addAccountProvider: "gmail",
   };
   let inFlight: Promise<void> | null = null;
   let liveSnapshotRevision = 0;
@@ -147,12 +151,12 @@ export function createAddAccountController(
     listeners.forEach((listener) => listener());
   };
 
-  const addAccount = (): Promise<void> => {
+  const addAccount = (provider: MailProviderId = "gmail"): Promise<void> => {
     if (inFlight) return inFlight;
-    update({ ...snapshot, addAccountState: { status: "pending" } });
+    update({ ...snapshot, addAccountState: { status: "pending" }, addAccountProvider: provider });
 
     const attempt = Promise.resolve()
-      .then(() => addAccountPort())
+      .then(() => addAccountPort(provider))
       .then(({ account }) => {
         const normalized = normalizedAccount(account);
         const acknowledgedByLiveSnapshot = liveAcknowledgedAccountIds.has(normalized.id);
@@ -228,7 +232,7 @@ export function createAddAccountController(
       if (!("retryable" in snapshot.addAccountState) || !snapshot.addAccountState.retryable) {
         return Promise.resolve();
       }
-      return addAccount();
+      return addAccount(snapshot.addAccountProvider);
     },
   };
 }

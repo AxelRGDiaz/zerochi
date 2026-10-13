@@ -1,9 +1,10 @@
 use super::{
     generate_pkce, AccountIdPort, AddAccountAttemptGuardSet, AddAccountError, AddAccountErrorTag,
-    BrowserPort, CallbackPort, ClientIdPort, ClientSecretPort, IdentityPort, LoopbackRedirect,
-    RandomSource, RefreshTokenStorePort, TokenExchangePort, TokenExchangeRequest,
+    AuthorizationRequest, BrowserPort, CallbackPort, ClientIdPort, ClientSecretPort, IdentityPort,
+    LocalhostRedirect, LoopbackRedirect, RandomSource, RefreshTokenStorePort, TokenExchangePort,
+    TokenExchangeRequest,
 };
-use crate::accounts::{AccountStatePort, MailAccount};
+use crate::accounts::{AccountStatePort, MailAccount, MailProvider};
 use std::sync::Arc;
 use uuid::Uuid;
 use zeroize::Zeroize;
@@ -24,13 +25,21 @@ pub(crate) struct AddAccountPorts {
 pub(crate) struct AddAccountService {
     attempts: AddAccountAttemptGuardSet,
     ports: AddAccountPorts,
+    provider: MailProvider,
 }
 
 impl AddAccountService {
     pub(crate) fn new(ports: AddAccountPorts) -> Self {
+        Self::for_provider(ports, MailProvider::Gmail)
+    }
+
+    /// The ports must be the adapters of `provider`; it selects the authorization request shape
+    /// and is recorded on the committed account.
+    pub(crate) fn for_provider(ports: AddAccountPorts, provider: MailProvider) -> Self {
         Self {
             attempts: AddAccountAttemptGuardSet::new(),
             ports,
+            provider,
         }
     }
 
@@ -42,9 +51,17 @@ impl AddAccountService {
         cancellation.ensure_active()?;
 
         let mut callback = self.ports.callback.bind()?;
-        let redirect = LoopbackRedirect::parse(callback.redirect_uri())?;
         let pkce = generate_pkce(self.ports.random.as_ref())?;
-        let request = super::AuthorizationRequest::new(&client_id, redirect, pkce)?;
+        let request = match self.provider {
+            MailProvider::Gmail => {
+                let redirect = LoopbackRedirect::parse(callback.redirect_uri())?;
+                AuthorizationRequest::new(&client_id, redirect, pkce)?
+            }
+            MailProvider::Outlook => {
+                let redirect = LocalhostRedirect::parse(callback.redirect_uri())?;
+                AuthorizationRequest::microsoft(&client_id, redirect, pkce)?
+            }
+        };
 
         self.ports.browser.open(&request, &cancellation).await?;
         cancellation.ensure_active()?;
@@ -76,10 +93,11 @@ impl AddAccountService {
             .await?;
         cancellation.ensure_active()?;
         let account_id = self.ports.account_ids.generate()?;
-        let account = MailAccount::new(
+        let account = MailAccount::with_provider(
             account_id.hyphenated().to_string(),
             identity.email,
             identity.display_name,
+            self.provider,
         );
         let mut refresh_token = tokens
             .refresh_token

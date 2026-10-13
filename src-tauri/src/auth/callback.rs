@@ -12,6 +12,9 @@ use std::{
 use zeroize::{Zeroize, Zeroizing};
 
 const CALLBACK_PATH: &str = "/oauth/callback";
+// Entra matches loopback redirects on the registered `http://localhost` host and path while
+// ignoring the port, so the Microsoft callback is served from the root path.
+const LOCALHOST_CALLBACK_PATH: &str = "/";
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(180);
 const MAX_REQUEST_BYTES: usize = 8 * 1024;
 const MAX_INVALID_REQUESTS: usize = 8;
@@ -22,22 +25,42 @@ const SUCCESS_BODY: &str = "<main class=\"card\"><div class=\"pet\" aria-hidden=
 const DENIED_BODY: &str = "<main class=\"card error\"><div class=\"pet\" aria-hidden=\"true\">(·_·)</div><p class=\"eyebrow\">Autorización no completada</p><h1>No pudimos continuar</h1><p>Vuelve a Zerochi para intentarlo otra vez o revisar el estado de la conexión.</p><p class=\"hint\">Puedes cerrar esta pestaña.</p></main>";
 const INVALID_BODY: &str = "<main class=\"card error\"><div class=\"pet\" aria-hidden=\"true\">(·_·)</div><p class=\"eyebrow\">Solicitud no válida</p><h1>Esta pestaña no pudo conectar</h1><p>Regresa a Zerochi y vuelve a iniciar la conexión.</p><p class=\"hint\">Puedes cerrar esta pestaña.</p></main>";
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RedirectStyle {
+    /// `http://127.0.0.1:<port>/oauth/callback`, as registered for Google Desktop clients.
+    LoopbackIp,
+    /// `http://localhost:<port>`, as registered for Entra public clients.
+    Localhost,
+}
+
 pub(crate) struct LoopbackCallbackPort {
     timeout: Duration,
+    style: RedirectStyle,
 }
 
 impl Default for LoopbackCallbackPort {
     fn default() -> Self {
         Self {
             timeout: DEFAULT_TIMEOUT,
+            style: RedirectStyle::LoopbackIp,
         }
     }
 }
 
 impl LoopbackCallbackPort {
+    pub(crate) fn localhost() -> Self {
+        Self {
+            timeout: DEFAULT_TIMEOUT,
+            style: RedirectStyle::Localhost,
+        }
+    }
+
     #[cfg(test)]
     fn with_timeout(timeout: Duration) -> Self {
-        Self { timeout }
+        Self {
+            timeout,
+            style: RedirectStyle::LoopbackIp,
+        }
     }
 }
 
@@ -53,9 +76,23 @@ impl CallbackPort for LoopbackCallbackPort {
             return Err(callback_invalid());
         }
 
+        let port = address.port();
+        let (redirect_uri, authority, path) = match self.style {
+            RedirectStyle::LoopbackIp => (
+                format!("http://127.0.0.1:{port}{CALLBACK_PATH}"),
+                format!("127.0.0.1:{port}"),
+                CALLBACK_PATH,
+            ),
+            RedirectStyle::Localhost => (
+                format!("http://localhost:{port}"),
+                format!("localhost:{port}"),
+                LOCALHOST_CALLBACK_PATH,
+            ),
+        };
         Ok(Box::new(LoopbackCallbackSession {
-            redirect_uri: format!("http://127.0.0.1:{}{CALLBACK_PATH}", address.port()),
-            authority: format!("127.0.0.1:{}", address.port()),
+            redirect_uri,
+            authority,
+            path,
             listener: Some(listener),
             timeout: self.timeout,
         }))
@@ -65,6 +102,7 @@ impl CallbackPort for LoopbackCallbackPort {
 struct LoopbackCallbackSession {
     redirect_uri: String,
     authority: String,
+    path: &'static str,
     listener: Option<TcpListener>,
     timeout: Duration,
 }
@@ -82,6 +120,7 @@ impl CallbackSession for LoopbackCallbackSession {
         let listener = self.listener.take();
         let expected_state = SensitiveString::new(expected_state.to_owned());
         let expected_authority = self.authority.clone();
+        let expected_path = self.path;
         let cancellation = cancellation.clone();
         let timeout = self.timeout;
         Box::pin(async move {
@@ -91,6 +130,7 @@ impl CallbackSession for LoopbackCallbackSession {
                     listener,
                     expected_state,
                     expected_authority,
+                    expected_path,
                     cancellation,
                     timeout,
                 )
@@ -105,6 +145,7 @@ fn receive_blocking(
     listener: TcpListener,
     expected_state: SensitiveString,
     expected_authority: String,
+    expected_path: &str,
     cancellation: Cancellation,
     timeout: Duration,
 ) -> Result<AuthorizationCallback, AddAccountError> {
@@ -125,6 +166,7 @@ fn receive_blocking(
                     &mut stream,
                     &expected_state,
                     &expected_authority,
+                    expected_path,
                     &cancellation,
                     deadline,
                 );
@@ -151,6 +193,7 @@ fn read_callback(
     stream: &mut TcpStream,
     expected_state: &SensitiveString,
     expected_authority: &str,
+    expected_path: &str,
     cancellation: &Cancellation,
     deadline: Instant,
 ) -> Result<AuthorizationCallback, AddAccountError> {
@@ -174,10 +217,11 @@ fn read_callback(
             Ok(count) => {
                 used += count;
                 if let Some(header_end) = find_header_end(&buffer[..used]) {
-                    return parse_request(
+                    return parse_request_at(
                         &buffer[..header_end],
                         expected_state,
                         expected_authority,
+                        expected_path,
                     );
                 }
             }
@@ -194,10 +238,20 @@ fn find_header_end(bytes: &[u8]) -> Option<usize> {
         .map(|at| at + 4)
 }
 
+#[cfg(test)]
 fn parse_request(
     request: &[u8],
     expected_state: &SensitiveString,
     expected_authority: &str,
+) -> Result<AuthorizationCallback, AddAccountError> {
+    parse_request_at(request, expected_state, expected_authority, CALLBACK_PATH)
+}
+
+fn parse_request_at(
+    request: &[u8],
+    expected_state: &SensitiveString,
+    expected_authority: &str,
+    expected_path: &str,
 ) -> Result<AuthorizationCallback, AddAccountError> {
     if request.len() > MAX_REQUEST_BYTES {
         return Err(callback_invalid());
@@ -220,7 +274,7 @@ fn parse_request(
     validate_host_header(request, first_line_end + 2, expected_authority)?;
 
     let (path, query) = split_at_byte(target, b'?').ok_or_else(callback_invalid)?;
-    if path != CALLBACK_PATH.as_bytes() || query.is_empty() {
+    if path != expected_path.as_bytes() || query.is_empty() {
         return Err(callback_invalid());
     }
 
@@ -797,5 +851,39 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(error.tag(), AddAccountErrorTag::CallbackInvalid);
+    }
+
+    #[test]
+    fn localhost_style_binds_the_entra_redirect_and_serves_only_the_root_path() {
+        let session = LoopbackCallbackPort::localhost().bind().expect("bind");
+        let port = session
+            .redirect_uri()
+            .strip_prefix("http://localhost:")
+            .expect("localhost redirect")
+            .parse::<u16>()
+            .expect("port");
+        assert_ne!(port, 0);
+
+        let state = SensitiveString::new("expected-state".to_owned());
+        let callback = parse_request_at(
+            b"GET /?code=fixture-code&state=expected-state HTTP/1.1\r\nHost: localhost:49152\r\n\r\n",
+            &state,
+            "localhost:49152",
+            LOCALHOST_CALLBACK_PATH,
+        )
+        .expect("callback");
+        assert_eq!(callback.code.expose(), "fixture-code");
+
+        for rejected in [
+            &b"GET /oauth/callback?code=fixture-code&state=expected-state HTTP/1.1\r\nHost: localhost:49152\r\n\r\n"[..],
+            &b"GET /?code=fixture-code&state=expected-state HTTP/1.1\r\nHost: 127.0.0.1:49152\r\n\r\n"[..],
+            &b"GET /?code=fixture-code&state=other-state HTTP/1.1\r\nHost: localhost:49152\r\n\r\n"[..],
+            &b"GET /favicon.ico HTTP/1.1\r\nHost: localhost:49152\r\n\r\n"[..],
+        ] {
+            let error =
+                parse_request_at(rejected, &state, "localhost:49152", LOCALHOST_CALLBACK_PATH)
+                    .unwrap_err();
+            assert_eq!(error.tag(), AddAccountErrorTag::CallbackInvalid);
+        }
     }
 }

@@ -41,9 +41,19 @@ Each developer creates a Google OAuth client of type **Desktop app**. In debug b
 
 Zerochi uses Authorization Code + PKCE as a public installed client. The embedded Desktop client credential is not a security boundary and is expected to be extractable from a distributed app; PKCE verifier/state and exact loopback redirect protect each authorization attempt. Authorization codes and access tokens remain in Rust memory, while each user's refresh token persists only in that user's Keychain. Rotating the shared Desktop credential requires a new signed build.
 
-## Future provider seam
+## Provider seam
 
-`Gmail → normalized Mail State → InboxPetSnapshot → PetEngine`. A future Outlook adapter stops at the same mail-state boundary and cannot change PetEngine.
+`Provider → normalized Mail State → InboxPetSnapshot → PetEngine`. Each `MailAccount` records its `provider` (absent means Gmail). The Outlook adapter in `src-tauri/src/microsoft` implements the same read, token-exchange, refresh, and identity ports as the Gmail adapter and stops at the same mail-state boundary; `ProviderRoutingSync` sends each account to a sync engine wired with its own provider's adapters, so one provider's tokens never reach the other's endpoints.
+
+Outlook specifics:
+
+- Personal Microsoft accounts only, through the `consumers` authority. The Entra app is a public client: Authorization Code + PKCE, redirect `http://localhost:<port>`, no client secret. `ZEROCHI_MICROSOFT_CLIENT_ID` is a public identifier.
+- The grant is `offline_access User.Read Mail.Read`. Graph access is limited to `/me` for identity and Inbox message `id`, `conversationId`, `subject`, `from`, `receivedDateTime`, and `isRead`; bodies and attachments are never requested.
+- Graph has no history cursor, so the persisted cursor is the newest observed Inbox `receivedDateTime` in epoch seconds plus one. New-message candidates are Inbox messages at or after it; the unread set is the paginated Inbox `isRead eq false` list, reconciled on every poll exactly like Gmail.
+- Message and conversation ids are requested as immutable ids and stored without base64 padding to fit the shared identifier alphabet.
+- Entra rotates the refresh token on every grant. The access token is cached in memory for its lifetime, and each replacement refresh token is written back to that account's Keychain entry.
+- Entra offers no public-client revocation endpoint: unlinking deletes the Keychain entry and local state only.
+- Navigation opens the Outlook.com inbox with a `login_hint`; there is no per-message deep link, so notification activation opens the inbox.
 
 ## Edge-case policies for later milestones
 

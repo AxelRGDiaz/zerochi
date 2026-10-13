@@ -37,11 +37,29 @@ const _: () =
 
 pub(crate) type AccountFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
+/// Mail provider that owns an account's OAuth grant and sync adapter. Gmail is the default so
+/// documents written before the field existed keep their meaning without a schema bump.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum MailProvider {
+    #[default]
+    Gmail,
+    Outlook,
+}
+
+impl MailProvider {
+    fn is_gmail(&self) -> bool {
+        *self == Self::Gmail
+    }
+}
+
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct MailAccount {
     id: String,
     email: String,
+    #[serde(default, skip_serializing_if = "MailProvider::is_gmail")]
+    provider: MailProvider,
     #[serde(skip_serializing_if = "Option::is_none")]
     display_name: Option<String>,
     pending_count: u64,
@@ -158,9 +176,19 @@ pub(crate) struct IncrementalCommitOutcome {
 
 impl MailAccount {
     pub(crate) fn new(id: String, email: String, display_name: Option<String>) -> Self {
+        Self::with_provider(id, email, display_name, MailProvider::Gmail)
+    }
+
+    pub(crate) fn with_provider(
+        id: String,
+        email: String,
+        display_name: Option<String>,
+        provider: MailProvider,
+    ) -> Self {
         Self {
             id,
             email,
+            provider,
             display_name,
             pending_count: 0,
             inbox_unread_count: None,
@@ -176,6 +204,10 @@ impl MailAccount {
 
     pub(crate) fn email(&self) -> &str {
         &self.email
+    }
+
+    pub(crate) fn provider(&self) -> MailProvider {
+        self.provider
     }
 
     pub(crate) fn pending_count(&self) -> u64 {
@@ -1888,5 +1920,29 @@ mod tests {
             account
         );
         assert!(commit(&state, account).is_err());
+    }
+
+    #[test]
+    fn provider_defaults_to_gmail_and_only_outlook_is_written() {
+        let id = "00000000-0000-4000-8000-000000000001";
+        let gmail: MailAccount = serde_json::from_str(&format!(
+            r#"{{"id":"{id}","email":"a@example.test","pendingCount":0,"active":true}}"#
+        ))
+        .expect("document written before the provider field");
+        assert_eq!(gmail.provider(), MailProvider::Gmail);
+        assert!(!serde_json::to_string(&gmail)
+            .expect("gmail json")
+            .contains("provider"));
+
+        let outlook = MailAccount::with_provider(
+            id.to_owned(),
+            "a@example.test".to_owned(),
+            None,
+            MailProvider::Outlook,
+        );
+        let json = serde_json::to_string(&outlook).expect("outlook json");
+        assert!(json.contains(r#""provider":"outlook""#));
+        let restored: MailAccount = serde_json::from_str(&json).expect("round trip");
+        assert_eq!(restored.provider(), MailProvider::Outlook);
     }
 }

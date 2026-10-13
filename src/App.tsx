@@ -53,7 +53,7 @@ function App() {
     return () => checkMailNowController.reset();
   }, [route]);
 
-  const { accounts, addAccountState } = useAddAccountController(addAccountController);
+  const { accounts, addAccountState, addAccountProvider } = useAddAccountController(addAccountController);
   const removeAccountState = useRemoveAccountController(removeAccountController);
   const { byAccountId: openAccountStatuses } = useOpenAccountController(openAccountController);
   const checkMailNowState = useCheckMailNowController(checkMailNowController);
@@ -74,9 +74,15 @@ function App() {
     content = (
       <ProviderSelectionView
         addAccountState={addAccountState}
+        addAccountProvider={addAccountProvider}
         onAddGmail={() => void completeAddAccountAttempt(
           addAccountController,
-          addAccountController.addAccount,
+          () => addAccountController.addAccount("gmail"),
+          appNavigationStore.back,
+        )}
+        onAddOutlook={() => void completeAddAccountAttempt(
+          addAccountController,
+          () => addAccountController.addAccount("outlook"),
           appNavigationStore.back,
         )}
         onBack={appNavigationStore.back}

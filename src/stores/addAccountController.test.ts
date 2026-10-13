@@ -39,10 +39,11 @@ describe("add account controller", () => {
       accounts: [],
       messages: [],
       addAccountState: { status: "idle" },
+      addAccountProvider: "gmail",
     });
   });
 
-  it("invokes the injected zero-argument port once and prevents duplicate pending attempts", async () => {
+  it("invokes the injected port once for Gmail by default and prevents duplicate pending attempts", async () => {
     let resolveAttempt!: (result: AddAccountResult) => void;
     const port = vi.fn<AddAccountPort>(() => new Promise((resolve) => {
       resolveAttempt = resolve;
@@ -56,7 +57,7 @@ describe("add account controller", () => {
     expect(controller.getSnapshot().addAccountState).toEqual({ status: "pending" });
     await Promise.resolve();
     expect(port).toHaveBeenCalledTimes(1);
-    expect(port).toHaveBeenCalledWith();
+    expect(port).toHaveBeenCalledWith("gmail");
 
     resolveAttempt({ account: addedAccount });
     await first;
@@ -86,6 +87,7 @@ describe("add account controller", () => {
       accounts: [personalAccount],
       messages: [],
       addAccountState: { status: "idle" },
+      addAccountProvider: "gmail",
     });
   });
 
@@ -172,5 +174,25 @@ describe("add account controller", () => {
     expect(serializedState).not.toMatch(/accessToken|refreshToken|clientSecret|oauth|authorizationCode/i);
     expect(serializedState).not.toContain("secret");
     expect(controller.getSnapshot().accounts).toEqual([addedAccount]);
+  });
+
+  it("sends the chosen provider, keeps it on the account, and retries the same provider", async () => {
+    const outlookAccount = { ...personalAccount, id: "outlook-1", provider: "outlook" as const };
+    const port = vi.fn<AddAccountPort>()
+      .mockRejectedValueOnce({ tag: "timeout", message: "", retryable: true, actionRequired: false })
+      .mockResolvedValueOnce({ account: outlookAccount });
+    const controller = createAddAccountController(port);
+
+    await controller.addAccount("outlook");
+    expect(controller.getSnapshot().addAccountProvider).toBe("outlook");
+    expect(controller.getSnapshot().addAccountState.status).toBe("retryable_error");
+
+    await controller.retry();
+
+    expect(port.mock.calls).toEqual([["outlook"], ["outlook"]]);
+    expect(controller.getSnapshot().accounts).toEqual([outlookAccount]);
+
+    controller.applySnapshot({ accounts: [outlookAccount, personalAccount], messages: [] });
+    expect(controller.getSnapshot().accounts.map(({ provider }) => provider)).toEqual(["outlook", undefined]);
   });
 });

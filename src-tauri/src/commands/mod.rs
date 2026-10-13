@@ -1,21 +1,29 @@
 //! Stable React/Tauri command DTO boundary.
 
 use crate::{
-    accounts::{AccountStatePort, JsonAccountState, MailAccount, MailMessage},
+    accounts::{AccountStatePort, JsonAccountState, MailAccount, MailMessage, MailProvider},
     auth::{
         AddAccountError, AddAccountErrorTag, AddAccountPorts, AddAccountService,
         LoopbackCallbackPort, OsAccountId, OsRandom, ProcessClientId, ProcessClientSecret,
-        RemoveAccountError, RemoveAccountErrorTag, RemoveAccountPorts, RemoveAccountService,
+        ProcessMicrosoftClientId, PublicClientSecret, RemoveAccountError, RemoveAccountErrorTag,
+        RemoveAccountPorts, RemoveAccountService,
     },
     gmail::GoogleHttpClient,
-    navigation::{ExternalNavigationService, MacOsBrowserPort, MacOsExternalNavigationService},
+    microsoft::{MicrosoftHttpClient, RotatingRefreshTokens},
+    navigation::{
+        ExternalNavigationError, ExternalNavigationService, MacOsBrowserPort,
+        MacOsExternalNavigationService,
+    },
     notifications::{
         NotificationActivationTarget, NotificationRequest, NotificationService,
         OpaqueNotificationId,
     },
     platform,
     secure_store::SecureRefreshTokenStorePort,
-    sync::{GmailSyncEngine, IncrementalSyncPort, SystemSyncClock, HEALTHY_POLL_INTERVAL},
+    sync::{
+        GmailSyncEngine, IncrementalSyncPort, ProviderRoutingSync, SystemSyncClock,
+        HEALTHY_POLL_INTERVAL,
+    },
     tray::{self, PetTrayState},
 };
 use serde::Serialize;
@@ -88,6 +96,7 @@ impl SyncStatusChanged {
 
 pub(crate) struct AppState {
     add_account: AddAccountService,
+    add_outlook_account: AddAccountService,
     remove_account: RemoveAccountService,
     accounts: Arc<dyn AccountStatePort>,
     external_navigation: Arc<dyn ExternalNavigationService>,
@@ -114,7 +123,7 @@ impl AppState {
             SecureRefreshTokenStorePort::signed_provisioned()?
         });
         let client_secret = Arc::new(ProcessClientSecret);
-        let sync_engine = Arc::new(
+        let gmail_sync = Arc::new(
             GmailSyncEngine::new(google.clone(), accounts.clone(), Arc::new(SystemSyncClock))
                 .with_incremental(
                     Arc::new(ProcessClientId),
@@ -123,6 +132,31 @@ impl AppState {
                     google.clone(),
                 ),
         );
+        let outlook_refresh_tokens = Arc::new(RotatingRefreshTokens::new(
+            refresh_tokens.clone(),
+            refresh_tokens.clone(),
+            accounts.clone(),
+        ));
+        let microsoft =
+            Arc::new(MicrosoftHttpClient::new()?.with_rotation(outlook_refresh_tokens.clone()));
+        let outlook_sync = Arc::new(
+            GmailSyncEngine::new(
+                microsoft.clone(),
+                accounts.clone(),
+                Arc::new(SystemSyncClock),
+            )
+            .with_incremental(
+                Arc::new(ProcessMicrosoftClientId),
+                Arc::new(PublicClientSecret),
+                outlook_refresh_tokens,
+                microsoft.clone(),
+            ),
+        );
+        let sync_engine = Arc::new(ProviderRoutingSync::new(
+            accounts.clone(),
+            gmail_sync,
+            outlook_sync,
+        ));
         let remove_account = RemoveAccountService::new(RemoveAccountPorts {
             refresh_tokens: refresh_tokens.clone(),
             refresh_token_store: refresh_tokens.clone(),
@@ -140,10 +174,25 @@ impl AppState {
                 callback: Arc::new(LoopbackCallbackPort::default()),
                 token_exchange: google.clone(),
                 identity: google,
-                refresh_tokens,
+                refresh_tokens: refresh_tokens.clone(),
                 accounts: accounts.clone(),
                 account_ids: Arc::new(OsAccountId),
             }),
+            add_outlook_account: AddAccountService::for_provider(
+                AddAccountPorts {
+                    client_id: Arc::new(ProcessMicrosoftClientId),
+                    client_secret: Arc::new(PublicClientSecret),
+                    random: Arc::new(OsRandom),
+                    browser: Arc::new(MacOsBrowserPort::new()),
+                    callback: Arc::new(LoopbackCallbackPort::localhost()),
+                    token_exchange: microsoft.clone(),
+                    identity: microsoft,
+                    refresh_tokens,
+                    accounts: accounts.clone(),
+                    account_ids: Arc::new(OsAccountId),
+                },
+                MailProvider::Outlook,
+            ),
             remove_account,
             accounts,
             external_navigation: Arc::new(MacOsExternalNavigationService::new()),
@@ -661,9 +710,18 @@ fn open_persisted_account_and_poll(
     // Polling is intentionally best-effort and independent from the browser handoff. A closed
     // scheduler must not change the established navigation result.
     let _ = poll_events.send(PollSchedulerEvent::PollNowAccount(account_id.to_owned()));
-    external_navigation
-        .open_account(account.email())
+    open_provider_account(external_navigation, account)
         .map_err(|_| OpenAccountCommandError::navigation_failed())
+}
+
+fn open_provider_account(
+    external_navigation: &dyn ExternalNavigationService,
+    account: &MailAccount,
+) -> Result<(), ExternalNavigationError> {
+    match account.provider() {
+        MailProvider::Gmail => external_navigation.open_account(account.email()),
+        MailProvider::Outlook => external_navigation.open_outlook_account(account.email()),
+    }
 }
 
 fn activate_persisted_notification_message(
@@ -692,7 +750,12 @@ fn activate_persisted_notification_message(
     };
 
     let _ = poll_events.send(PollSchedulerEvent::PollNowAccount(account_id));
-    let _ = external_navigation.open_message(account.email(), message.thread_id());
+    let _ = match account.provider() {
+        MailProvider::Gmail => {
+            external_navigation.open_message(account.email(), message.thread_id())
+        }
+        MailProvider::Outlook => external_navigation.open_outlook_account(account.email()),
+    };
 }
 
 pub(crate) fn activate_notification_message(app: &AppHandle, target: NotificationActivationTarget) {
@@ -750,13 +813,26 @@ fn oauth_completion_actions(succeeded: bool) -> &'static [OAuthCompletionAction]
     }
 }
 
+/// `None` keeps the original zero-argument Gmail contract.
+fn add_account_provider(provider: Option<&str>) -> Result<MailProvider, AddAccountError> {
+    match provider {
+        None | Some("gmail") => Ok(MailProvider::Gmail),
+        Some("outlook") => Ok(MailProvider::Outlook),
+        Some(_) => Err(AddAccountError::from_tag(AddAccountErrorTag::ConfigInvalid)),
+    }
+}
+
 #[tauri::command]
 pub(crate) async fn add_account(
+    provider: Option<String>,
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<AddAccountResult, AddAccountError> {
-    let result = state
-        .add_account
+    let service = match add_account_provider(provider.as_deref())? {
+        MailProvider::Gmail => &state.add_account,
+        MailProvider::Outlook => &state.add_outlook_account,
+    };
+    let result = service
         .add_account()
         .await
         .map(|account| AddAccountResult { account });
@@ -1704,5 +1780,24 @@ mod tests {
                 OAuthCompletionAction::WakePolling,
             ]
         );
+    }
+
+    #[test]
+    fn add_account_provider_defaults_to_gmail_and_rejects_unknown_providers() {
+        assert_eq!(add_account_provider(None).unwrap(), MailProvider::Gmail);
+        assert_eq!(
+            add_account_provider(Some("gmail")).unwrap(),
+            MailProvider::Gmail
+        );
+        assert_eq!(
+            add_account_provider(Some("outlook")).unwrap(),
+            MailProvider::Outlook
+        );
+        for unknown in ["icloud", "Outlook", ""] {
+            assert_eq!(
+                add_account_provider(Some(unknown)).unwrap_err().tag(),
+                AddAccountErrorTag::ConfigInvalid
+            );
+        }
     }
 }

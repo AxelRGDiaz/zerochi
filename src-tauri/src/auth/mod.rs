@@ -23,6 +23,7 @@ pub(crate) use callback::LoopbackCallbackPort;
 #[allow(unused_imports)]
 pub(crate) use config::{
     ClientId, ClientSecret, Environment, ProcessClientId, ProcessClientSecret, ProcessEnvironment,
+    ProcessMicrosoftClientId, PublicClientSecret,
 };
 pub(crate) use error::{AddAccountError, AddAccountErrorTag};
 #[allow(unused_imports)]
@@ -38,7 +39,9 @@ pub(crate) use remove::{
     RemoveAccountError, RemoveAccountErrorTag, RemoveAccountPorts, RemoveAccountService,
 };
 #[allow(unused_imports)]
-pub(crate) use request::{AuthorizationRequest, LoopbackRedirect, APPROVED_SCOPES};
+pub(crate) use request::{
+    AuthorizationRequest, LocalhostRedirect, LoopbackRedirect, APPROVED_SCOPES, MICROSOFT_SCOPES,
+};
 pub(crate) use secret::SensitiveString;
 #[allow(unused_imports)]
 pub(crate) use service::{AddAccountPorts, AddAccountService, OsAccountId};

@@ -8,6 +8,8 @@ include!(concat!(env!("OUT_DIR"), "/oauth_build_config.rs"));
 
 const CLIENT_ID_ENV: &str = "ZEROCHI_GOOGLE_CLIENT_ID";
 const CLIENT_SECRET_ENV: &str = "ZEROCHI_GOOGLE_CLIENT_SECRET";
+const MICROSOFT_CLIENT_ID_ENV: &str = "ZEROCHI_MICROSOFT_CLIENT_ID";
+const MICROSOFT_CLIENT_ID_BYTES: usize = 36;
 const CLIENT_ID_SUFFIX: &str = ".apps.googleusercontent.com";
 const MIN_CLIENT_ID_BYTES: usize = 32;
 const MAX_CLIENT_ID_BYTES: usize = 255;
@@ -57,6 +59,41 @@ impl ClientIdPort for ProcessClientId {
             let current_dir = std::env::current_dir().map_err(|_| config_invalid())?;
             Self::load_from(&ProcessEnvironment, &current_dir)
         }
+    }
+}
+
+/// Microsoft Entra application (client) ID. It is a public identifier, not a credential:
+/// Entra public clients authenticate with PKCE alone and have no client secret.
+pub(crate) struct ProcessMicrosoftClientId;
+
+impl ClientIdPort for ProcessMicrosoftClientId {
+    fn load(&self) -> Result<ClientId, AddAccountError> {
+        #[cfg(not(debug_assertions))]
+        {
+            let value = decode_masked(
+                BUILD_MICROSOFT_CLIENT_ID_MASKED,
+                BUILD_MICROSOFT_CLIENT_ID_MASK_SEED,
+            )?;
+            ClientId::parse_microsoft(value)
+        }
+        #[cfg(debug_assertions)]
+        {
+            let current_dir = std::env::current_dir().map_err(|_| config_invalid())?;
+            ClientId::parse_microsoft(load_debug_value(
+                MICROSOFT_CLIENT_ID_ENV,
+                &ProcessEnvironment,
+                &current_dir,
+            )?)
+        }
+    }
+}
+
+/// Secret port for providers whose installed-app flow has no client secret.
+pub(crate) struct PublicClientSecret;
+
+impl ClientSecretPort for PublicClientSecret {
+    fn load(&self) -> Result<ClientSecret, AddAccountError> {
+        Ok(ClientSecret::not_applicable())
     }
 }
 
@@ -207,6 +244,11 @@ impl ClientSecret {
         }
     }
 
+    /// Placeholder for public clients. Adapters without a secret must never send it.
+    pub(crate) fn not_applicable() -> Self {
+        Self(String::new())
+    }
+
     pub(crate) fn expose(&self) -> &str {
         &self.0
     }
@@ -265,6 +307,23 @@ impl ClientId {
             && valid_prefix
             && !value.bytes().any(|byte| byte.is_ascii_control())
         {
+            Ok(Self(value))
+        } else {
+            Err(config_invalid())
+        }
+    }
+
+    /// Entra client IDs are canonical lowercase-or-uppercase hyphenated GUIDs.
+    pub(crate) fn parse_microsoft(value: String) -> Result<Self, AddAccountError> {
+        let valid = value.len() == MICROSOFT_CLIENT_ID_BYTES
+            && value.bytes().enumerate().all(|(index, byte)| {
+                if matches!(index, 8 | 13 | 18 | 23) {
+                    byte == b'-'
+                } else {
+                    byte.is_ascii_hexdigit()
+                }
+            });
+        if valid {
             Ok(Self(value))
         } else {
             Err(config_invalid())

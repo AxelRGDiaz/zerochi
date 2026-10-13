@@ -4,6 +4,8 @@ import path from "node:path";
 
 const CLIENT_ID_ENV = "ZEROCHI_GOOGLE_CLIENT_ID";
 const CLIENT_SECRET_ENV = "ZEROCHI_GOOGLE_CLIENT_SECRET";
+// Optional public identifier for Outlook; it is not part of the Google credential pair.
+const MICROSOFT_CLIENT_ID_ENV = "ZEROCHI_MICROSOFT_CLIENT_ID";
 const MAX_DOTENV_BYTES = 64 * 1024;
 
 function hasValue(environment, name) {
@@ -21,6 +23,7 @@ function loadApprovedDotenvValues(dotenvPath) {
     return {
       [CLIENT_ID_ENV]: process.env[CLIENT_ID_ENV],
       [CLIENT_SECRET_ENV]: process.env[CLIENT_SECRET_ENV],
+      [MICROSOFT_CLIENT_ID_ENV]: process.env[MICROSOFT_CLIENT_ID_ENV],
     };
   } finally {
     for (const name of Object.keys(process.env)) {
@@ -75,6 +78,10 @@ export function loadOAuthReleaseEnvironment({
     const loaded = loadFile(dotenvPath);
     environment[CLIENT_ID_ENV] = loaded?.[CLIENT_ID_ENV];
     environment[CLIENT_SECRET_ENV] = loaded?.[CLIENT_SECRET_ENV];
+    const microsoftClientId = loaded?.[MICROSOFT_CLIENT_ID_ENV];
+    if (!isPresent(environment, MICROSOFT_CLIENT_ID_ENV) && typeof microsoftClientId === "string") {
+      environment[MICROSOFT_CLIENT_ID_ENV] = microsoftClientId;
+    }
   } catch {
     throw new Error("The root .env could not be parsed for the release build.");
   }

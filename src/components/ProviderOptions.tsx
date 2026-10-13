@@ -1,6 +1,6 @@
 export const accountProviders = [
   { id: "gmail", name: "Gmail", enabled: true },
-  { id: "outlook", name: "Outlook", enabled: false },
+  { id: "outlook", name: "Outlook", enabled: true },
   { id: "icloud", name: "iCloud", enabled: false },
 ] as const;
 
@@ -9,16 +9,20 @@ export type AccountProvider = typeof accountProviders[number];
 export function getProviderAction(
   provider: AccountProvider,
   onAddGmail: () => void,
+  onAddOutlook?: () => void,
 ): (() => void) | undefined {
-  return provider.enabled ? onAddGmail : undefined;
+  if (!provider.enabled) return undefined;
+  return provider.id === "outlook" ? onAddOutlook : onAddGmail;
 }
 
 interface ProviderOptionsProps {
+  /** One add attempt runs at a time, so a pending attempt disables every provider. */
   gmailPending: boolean;
   onAddGmail: () => void;
+  onAddOutlook?: () => void;
 }
 
-export function ProviderOptions({ gmailPending, onAddGmail }: ProviderOptionsProps) {
+export function ProviderOptions({ gmailPending, onAddGmail, onAddOutlook }: ProviderOptionsProps) {
   return (
     <ul className="provider-list" aria-label="Proveedores de correo">
       {accountProviders.map((provider) => {
@@ -30,9 +34,9 @@ export function ProviderOptions({ gmailPending, onAddGmail }: ProviderOptionsPro
             <button
               className="provider-button"
               type="button"
-              aria-label={provider.enabled ? "Agregar cuenta de Gmail" : `${provider.name}, Próximamente`}
+              aria-label={provider.enabled ? `Agregar cuenta de ${provider.name}` : `${provider.name}, Próximamente`}
               disabled={disabled}
-              onClick={getProviderAction(provider, onAddGmail)}
+              onClick={getProviderAction(provider, onAddGmail, onAddOutlook)}
             >
               <span>{provider.name}</span>
               <span className="provider-state">{state}</span>

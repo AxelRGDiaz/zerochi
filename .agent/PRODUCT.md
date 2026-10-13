@@ -13,11 +13,11 @@ Zerochi is a tiny macOS menu-bar companion that turns newly detected mail into a
 
 ## V1
 
-macOS, menu bar/popup, Gmail personal and Workspace, independent multi-account OAuth, read-only incremental sync and polling, local persistence, native notifications/navigation, global and per-account badges, secure credentials, autostart/lifecycle, pixel-art sprite sheets, dark/light UI. One global pet uses the sum of active-account Gmail unread counts for its ambient face, phrase, and visible total; Zerochi pending remains the local event/feeding state.
+macOS, menu bar/popup, Gmail personal and Workspace, Outlook personal accounts (read-only Microsoft Graph), independent multi-account OAuth, read-only incremental sync and polling, local persistence, native notifications/navigation, global and per-account badges, secure credentials, autostart/lifecycle, pixel-art sprite sheets, dark/light UI. One global pet uses the sum of active-account Gmail unread counts for its ambient face, phrase, and visible total; Zerochi pending remains the local event/feeding state.
 
 ## Out of scope
 
-Backend, cloud database, Pub/Sub, Electron, AI, mail sending or mutation, Outlook/iCloud, App Store packaging work before product validation, and final character art in M0.
+Backend, cloud database, Pub/Sub, Electron, AI, mail sending or mutation, Outlook work/school accounts, iCloud, App Store packaging work before product validation, and final character art in M0.
 
 ## Primary UX
 

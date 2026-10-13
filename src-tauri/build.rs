@@ -4,6 +4,9 @@ const CLIENT_ID_ENV: &str = "ZEROCHI_GOOGLE_CLIENT_ID";
 const CLIENT_SECRET_ENV: &str = "ZEROCHI_GOOGLE_CLIENT_SECRET";
 const CLIENT_ID_MASK_SEED: u8 = 0x6d;
 const CLIENT_SECRET_MASK_SEED: u8 = 0xb7;
+// Optional: the Entra client ID is a public identifier. Without it, Outlook stays unavailable.
+const MICROSOFT_CLIENT_ID_ENV: &str = "ZEROCHI_MICROSOFT_CLIENT_ID";
+const MICROSOFT_CLIENT_ID_MASK_SEED: u8 = 0x3b;
 
 fn main() {
     // This marker is non-sensitive and may safely participate in Cargo invalidation.
@@ -28,11 +31,26 @@ fn main() {
         (Vec::new(), Vec::new())
     };
 
+    let microsoft_client_id = if release {
+        env::var(MICROSOFT_CLIENT_ID_ENV)
+            .ok()
+            .filter(|value| !value.is_empty())
+            .map(|value| {
+                validate_microsoft_client_id(&value);
+                mask(value.as_bytes(), MICROSOFT_CLIENT_ID_MASK_SEED)
+            })
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+
     let generated = format!(
         "const BUILD_CLIENT_ID_MASK_SEED: u8 = {CLIENT_ID_MASK_SEED};\n\
          const BUILD_CLIENT_SECRET_MASK_SEED: u8 = {CLIENT_SECRET_MASK_SEED};\n\
+         const BUILD_MICROSOFT_CLIENT_ID_MASK_SEED: u8 = {MICROSOFT_CLIENT_ID_MASK_SEED};\n\
          const BUILD_CLIENT_ID_MASKED: &[u8] = &{client_id:?};\n\
-         const BUILD_CLIENT_SECRET_MASKED: &[u8] = &{client_secret:?};\n"
+         const BUILD_CLIENT_SECRET_MASKED: &[u8] = &{client_secret:?};\n\
+         const BUILD_MICROSOFT_CLIENT_ID_MASKED: &[u8] = &{microsoft_client_id:?};\n"
     );
     let output = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo OUT_DIR is required"))
         .join("oauth_build_config.rs");
@@ -55,6 +73,18 @@ fn validate_client_id(value: &str) {
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'));
     assert!(valid, "ZEROCHI_GOOGLE_CLIENT_ID is invalid");
+}
+
+fn validate_microsoft_client_id(value: &str) {
+    let valid = value.len() == 36
+        && value.bytes().enumerate().all(|(index, byte)| {
+            if matches!(index, 8 | 13 | 18 | 23) {
+                byte == b'-'
+            } else {
+                byte.is_ascii_hexdigit()
+            }
+        });
+    assert!(valid, "ZEROCHI_MICROSOFT_CLIENT_ID is invalid");
 }
 
 fn validate_client_secret(value: &str) {

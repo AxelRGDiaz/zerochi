@@ -2,6 +2,7 @@ mod accounts;
 mod auth;
 mod commands;
 mod gmail;
+mod microsoft;
 mod navigation;
 mod notifications;
 mod platform;

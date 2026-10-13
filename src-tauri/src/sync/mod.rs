@@ -5,7 +5,7 @@
 #![allow(dead_code)]
 
 use crate::{
-    accounts::{AccountStatePort, MailAccount, MailMessage, MailStateSnapshot},
+    accounts::{AccountStatePort, MailAccount, MailMessage, MailProvider, MailStateSnapshot},
     auth::{
         ClientIdPort, ClientSecretPort, RefreshTokenReadError, RefreshTokenReadPort,
         SensitiveString,
@@ -143,6 +143,51 @@ pub(crate) trait IncrementalSyncPort: Send + Sync {
         &'a self,
         account_id: &'a str,
     ) -> SyncFuture<'a, Result<PollOutcome, PollError>>;
+}
+
+/// Sends each account to the engine wired with its provider's adapters. Both engines share one
+/// account state, so either can enumerate eligibility.
+pub(crate) struct ProviderRoutingSync {
+    accounts: Arc<dyn AccountStatePort>,
+    gmail: Arc<dyn IncrementalSyncPort>,
+    outlook: Arc<dyn IncrementalSyncPort>,
+}
+
+impl ProviderRoutingSync {
+    pub(crate) fn new(
+        accounts: Arc<dyn AccountStatePort>,
+        gmail: Arc<dyn IncrementalSyncPort>,
+        outlook: Arc<dyn IncrementalSyncPort>,
+    ) -> Self {
+        Self {
+            accounts,
+            gmail,
+            outlook,
+        }
+    }
+}
+
+impl IncrementalSyncPort for ProviderRoutingSync {
+    fn eligible_account_ids(&self) -> Result<Vec<String>, PollError> {
+        self.gmail.eligible_account_ids()
+    }
+
+    fn poll_account<'a>(
+        &'a self,
+        account_id: &'a str,
+    ) -> SyncFuture<'a, Result<PollOutcome, PollError>> {
+        let provider = self.accounts.snapshot().ok().and_then(|accounts| {
+            accounts
+                .iter()
+                .find(|account| account.id() == account_id)
+                .map(MailAccount::provider)
+        });
+        // A missing account falls through to the default engine, which reports it as state.
+        match provider {
+            Some(MailProvider::Outlook) => self.outlook.poll_account(account_id),
+            Some(MailProvider::Gmail) | None => self.gmail.poll_account(account_id),
+        }
+    }
 }
 
 impl GmailSyncEngine {
@@ -1770,5 +1815,105 @@ mod tests {
         let snapshot = accounts.mail_snapshot().expect("final snapshot");
         assert!(snapshot.accounts.is_empty());
         assert!(snapshot.messages.is_empty());
+    }
+
+    struct RoutingAccounts(Vec<MailAccount>);
+
+    impl AccountStatePort for RoutingAccounts {
+        fn snapshot(&self) -> Result<Vec<MailAccount>, crate::accounts::AccountStateError> {
+            Ok(self.0.clone())
+        }
+
+        fn commit<'a>(
+            &'a self,
+            _account: MailAccount,
+        ) -> crate::accounts::AccountFuture<
+            'a,
+            Result<MailAccount, crate::accounts::AccountStateError>,
+        > {
+            Box::pin(async { Err(crate::accounts::AccountStateError) })
+        }
+
+        fn update_sync_cursor<'a>(
+            &'a self,
+            _account_id: &'a str,
+            _history_id: String,
+            _synced_at: String,
+            _inbox_unread_count: u64,
+        ) -> crate::accounts::AccountFuture<
+            'a,
+            Result<MailAccount, crate::accounts::AccountStateError>,
+        > {
+            Box::pin(async { Err(crate::accounts::AccountStateError) })
+        }
+    }
+
+    struct RecordingEngine {
+        name: &'static str,
+        polled: Arc<Mutex<Vec<(&'static str, String)>>>,
+    }
+
+    impl IncrementalSyncPort for RecordingEngine {
+        fn eligible_account_ids(&self) -> Result<Vec<String>, PollError> {
+            Ok(Vec::new())
+        }
+
+        fn poll_account<'a>(
+            &'a self,
+            account_id: &'a str,
+        ) -> SyncFuture<'a, Result<PollOutcome, PollError>> {
+            self.polled
+                .lock()
+                .expect("polled")
+                .push((self.name, account_id.to_owned()));
+            Box::pin(async {
+                Err(PollError {
+                    kind: PollErrorKind::Busy,
+                    retry_after: Duration::from_secs(1),
+                    committed_snapshot: None,
+                })
+            })
+        }
+    }
+
+    #[test]
+    fn routing_sends_each_account_only_to_its_provider_engine() {
+        let gmail_id = "00000000-0000-4000-8000-000000000001";
+        let outlook_id = "00000000-0000-4000-8000-000000000002";
+        let missing_id = "00000000-0000-4000-8000-000000000003";
+        let accounts = Arc::new(RoutingAccounts(vec![
+            MailAccount::new(gmail_id.into(), "g@example.test".into(), None),
+            MailAccount::with_provider(
+                outlook_id.into(),
+                "o@example.test".into(),
+                None,
+                MailProvider::Outlook,
+            ),
+        ]));
+        let polled = Arc::new(Mutex::new(Vec::new()));
+        let router = ProviderRoutingSync::new(
+            accounts,
+            Arc::new(RecordingEngine {
+                name: "gmail",
+                polled: polled.clone(),
+            }),
+            Arc::new(RecordingEngine {
+                name: "outlook",
+                polled: polled.clone(),
+            }),
+        );
+
+        for account_id in [gmail_id, outlook_id, missing_id] {
+            let _ = tauri::async_runtime::block_on(router.poll_account(account_id));
+        }
+
+        assert_eq!(
+            &*polled.lock().expect("polled"),
+            &[
+                ("gmail", gmail_id.to_owned()),
+                ("outlook", outlook_id.to_owned()),
+                ("gmail", missing_id.to_owned()),
+            ]
+        );
     }
 }
